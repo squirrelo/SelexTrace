@@ -1,7 +1,7 @@
 SelexTrace
 ==========
 
-Code used to trace the evolution of sequences and structures in a SELEX experiment. Also used to trace the mutational evolution occuring during a SELEX experiment.
+Code used to trace the rise of sequences and structures in a SELEX experiment. Also used to trace the mutational evolution occuring during a SELEX experiment.
 
 REQUIREMENTS
 ==========

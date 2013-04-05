@@ -130,7 +130,7 @@ def run_locarnap_for_infernal(currgroup, clusters, otus, basefolder):
 
 def score_rnaforester(struct1, struct2):
     '''returns relative score of two structures'''
-    p = Popen(["rnaforester", "--score", "-r"], stdin=PIPE, stdout=PIPE)
+    p = Popen(["RNAforester", "--score", "-r"], stdin=PIPE, stdout=PIPE)
     p.stdin.write(''.join([struct1, "\n", struct2, "\n&"]))
     return float(p.communicate()[0].split("\n")[-2])
 

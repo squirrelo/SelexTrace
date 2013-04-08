@@ -46,7 +46,7 @@ def fold_groups(otus, clusters, struct, hold):
     '''Function for multithreading.
     Recomputes structure for a group'''
     #compute new structures for each group
-    aln, currstruct = run_locarnap_groups(otus, clusters, 25, cpus=2, foldless=True)
+    aln, currstruct = run_locarnap_groups(otus, clusters, 25, foldless=True)
     aln = 0
     if currstruct == "":
         currstruct = struct
@@ -80,7 +80,6 @@ def run_locarnap_groups(otulist, clusters, numkept, cpus=1, foldless=False):
         for header,seq in MinimalFastaParser(filein):
             seqs.append((header, seq))
         filein.close()
-
     return run_locarnap(seqs, 30, cpus, foldless)
 
 def run_locarnap_for_infernal(currgroup, clusters, otus, basefolder):
@@ -170,7 +169,7 @@ def run_infernal(lock, cmfile, rnd, basefolder, outfolder, cpus=1, score=0.0, mp
             seqs = LoadSeqs(basefolder + "R" + str(rnd) + "/R" + str(rnd) + "-Unique-Remaining.fasta", moltype=RNA, aligned=False)
         else:
             seqs = LoadSeqs(basefolder + "R" + str(rnd) + "/R" + str(rnd) + "-Unique.fasta", moltype=RNA, aligned=False)
-        params = {'--notrunc' : True, '--toponly' : True, '--cpu' : cpus}
+        params = {'-g' : True, '--toponly' : True, '--cpu' : cpus}  # '--notrunc' : True, 
         if mpi:
             params['mpi'] = True
         result = cmsearch_from_file(cmfile, seqs, RNA, cutoff=score, params=params)
@@ -315,6 +314,14 @@ if __name__ == "__main__":
         print "iteration " + str(iteration) + ": " + str(len(structgroups)) + " initial groups"
         #initial clustering by structures generated in first folding
         structgroups = group_by_forester(structgroups, foresterscore)
+        out = open(otufolder + "groups.txt", 'w')
+        gout.write(str(foresterscore) + "\n")
+        for group in structgroups:
+            gout.write(group + ":")
+            for g in structgroups[group]:
+                gout.write(g+" ")
+            gout.write("\n")
+        gout.close()
         iteration += 1
 
         while startcount != endcount: #keep refining while we are still grouping structs
@@ -324,11 +331,7 @@ if __name__ == "__main__":
             #make a pool of workers, one for each cpu available
             manager = Manager()
             hold = manager.dict()
-            #make sure to check if we have only 1 cpu
-            procs = int(floor(args.c/2))
-            if procs == 0:
-                procs = 1
-            pool = Pool(processes=procs)
+            pool = Pool(processes=args.c)
             #run the pool over all groups to get structures for new groups
             for struct in structgroups:
                 pool.apply_async(func=fold_groups, args=(otus, structgroups[struct], struct, hold))

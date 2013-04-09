@@ -32,24 +32,22 @@ def remove_duplicates(seqsin):
     #sequences with that sequence
     repseqs = defaultdict(list)
     for seq in seqsin:
-        if seq[1] not in uniques.keys():
+        if seq[1] not in uniques:
             #append unique sequence to uniques list
             uniques[seq[1]] = seq[0]
         #first item in repseqs list will be header of representative sequence
         repseqs[seq[1]].append(seq[0])
         counts[seq[1]] += 1
-    #reverse uniques keying and turn to list before returning
-    uniquesret = [(uniques[seq], seq) for seq in uniques]
     #append count to end of header
-    uniques = []
-    for unique in uniquesret:
+    uniquesret = []
+    for unique in uniques:
         #get count for this seuqnce
-        count = counts[unique[1]]
+        count = counts[unique]
         #append to header and add to return list
-        uniques.append((unique[0] + "_" + str(count), unique[1]))
+        uniquesret.append((uniques[unique] + "_" + str(count), unique))
     #sort by sequence count, highest to lowest
-    uniques.sort(reverse=True, key=lambda item: int(item[0].split("_")[1]))
-    return uniques, repseqs
+    uniquesret.sort(reverse=True, key=lambda item: int(item[0].split("_")[1]))
+    return uniquesret, repseqs
 
 if __name__ == "__main__":
     from sys import argv, exit

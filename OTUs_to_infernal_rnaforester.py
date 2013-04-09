@@ -209,8 +209,10 @@ if __name__ == "__main__":
     (Default 0.0)")
     parser.add_argument('-c', type=int, default=1, help="Number of CPUs to use \
     (Default 1)")
-    parser.add_argument('--inf', action="store_true", help="Skip straight to infernal (Default False)")
-    parser.add_argument('--mpi', action="store_true", help="Run infernal in MPI mode (Default False)")
+    parser.add_argument('--inf', action="store_true", default=False, help="Skip straight to infernal \
+    (Default False)")
+    parser.add_argument('--mpi', action="store_true", default=False, help="Run infernal in MPI mode \
+    (Default False)")
 
     args = parser.parse_args()
     if args.r < 1:
@@ -314,7 +316,7 @@ if __name__ == "__main__":
         print "iteration " + str(iteration) + ": " + str(len(structgroups)) + " initial groups"
         #initial clustering by structures generated in first folding
         structgroups = group_by_forester(structgroups, foresterscore)
-        out = open(otufolder + "groups.txt", 'w')
+        gout = open(otufolder + "groups.txt", 'w')
         gout.write(str(foresterscore) + "\n")
         for group in structgroups:
             gout.write(group + ":")
@@ -375,13 +377,13 @@ if __name__ == "__main__":
     print "Runtime: " + str((time() - secs)/60)+ "m"
     print "==Running Infernal for all groups=="
     print "Infernal score cutoff: " + str(infernalscore)
-    #create teh csv file for holding all teh hit counts
+    #create the csv file for holding all the hit counts
     ihits = open(otufolder + "infernalhits.csv", 'w')
     ihits.write(",")
     for i in range(1, args.r+1):
         ihits.write("round" + str(i) + ",")
     ihits.write("\n")
-
+    #loop over each group and run infernal on it for all rounds
     for group in walk(otufolder).next()[1]:
         secs = time()
         print "GROUP: " + group
@@ -396,11 +398,11 @@ if __name__ == "__main__":
         #only run infernal if there were more than 100 total sequences in group
         if seqs > 99 and not skip:
             currotufolder = otufolder + group
-            #create the cm file and calubrate it 
-            cmfile = open(otufolder +  group + "/infernal.cm", 'w')
-            cmfile.write(cmbuild_from_file(otufolder +  group + "/locarnap-aln.sto"))
+            #create the cm file and calibrate it 
+            cmfile = open(currotufolder+ "/infernal_" + group + ".cm", 'w')
+            cmfile.write(cmbuild_from_file(currotufolder + "/locarnap-aln.sto"))
             cmfile.close()
-            cmfile = otufolder +  group + "/infernal.cm"
+            cmfile = currotufolder + "/infernal_" + group + ".cm"
             calibrate_file(cmfile)
 
             #Run all rounds of selection through infernal at once

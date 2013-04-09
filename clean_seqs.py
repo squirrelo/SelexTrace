@@ -27,7 +27,7 @@ def write_fasta_dict(dct, filename):
     fileout.close()
 
 
-def rem_N_short(seqs, minlen=0):
+def rem_N_short(seqs, minlen=1):
     '''Takes in a MinimalFastaParser formatted list of sequences and returns list 
     with sequences containing Ns or shorter than minlen removed'''
     rem = []
@@ -47,13 +47,13 @@ if __name__ == "__main__":
     parser.add_argument('-p', default="", required=True, help="3' primer \
     sequence to strip")
     parser.add_argument('-o', default = "", help="Output folder (default same as input)")
-    parser.add_argument('-l', default = 0, type=int, help="minimum length of \
-    sequence required to not be removed from pool (default 0)")
+    parser.add_argument('-l', default = 1, type=int, help="minimum length of \
+    sequence to keep (default 1)")
     parser.add_argument('-q', action='store_true', default = False, help="Input is fastq format \
     (default fasta)")
 
     args = parser.parse_args()
-    if args.l < 0:
+    if args.l < 1:
         print "ERROR: min sequence length must be greater than 1!"
         exit(1)
 
@@ -69,14 +69,14 @@ if __name__ == "__main__":
         if folderout[:-1] != '/':
             folderout += "/"
     print "===================="
-    print "Folder in: " + args.i
-    print "Output Folder: " + args.o
+    print "Folder in: " + folderin
+    print "Output Folder: " + folderout
     print "3' primer: " + args.p
     print "Min length: " + str(args.l)
     print "====================\n"
     for filein in walk(args.i).next()[2]:
         #skip if not fastq or fasta file
-        if filein.split(".")[-1] != "fastq" and filein.split(".")[-1] != "fasta":
+        if filein.split(".")[-1] != "fastq" and filein.split(".")[-1] != "fasta" and filein.split(".")[-1] != "fas":
             continue
         basename = filein
         basename = basename[:basename.rfind(".")]
@@ -86,9 +86,10 @@ if __name__ == "__main__":
             mkdir(folderout + basename)
 
         currfolder = folderout + basename + "/" + basename
-
+        print "==ROUND " + basename + "=="
         #convert fastq to fasta if needed
         if args.q:
+            print "==Converting to FASTA=="
             f = open(currfolder + ".fasta", 'w')
             for header, seq, qual in MinimalFastqParser(folderin+filein, strict=False):
                 f.write(''.join([">", header, '\n', seq, '\n']))
@@ -96,7 +97,6 @@ if __name__ == "__main__":
             filein = currfolder + ".fasta"
             seqs = 0
 
-        print "==ROUND " + basename + "=="
         print "==Cleaning input sequences=="
 
         log = open(currfolder + "-cleanup.log", 'w')
@@ -111,6 +111,7 @@ if __name__ == "__main__":
         str(len(rem)) + " sequences removed")
         print str(len(kept)) + " sequences left, " + \
         str(len(rem)) + " sequences removed. " + str((clock() - secs)/60) + " minutes\n"
+        write_fasta_list(kept, currfolder + "-Stripped.fasta")
         write_fasta_list(rem, currfolder + "-NotStripped.fasta")
         rem = 0
         #remove all sequences with Ns and short sequences

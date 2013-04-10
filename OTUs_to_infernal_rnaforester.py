@@ -156,8 +156,9 @@ def make_r2r(insto, outfolder, group):
     '''generates R2R secondary structure pdf with default colorings'''
     p = Popen(["r2r", "--GSC-weighted-consensus", insto, outfolder + "/" + group + ".sto", \
         "3", "0.97", "0.9", "0.75", "4", "0.97", "0.9", "0.75", "0.5", "0.1"])
-    sleep(1)
-    p = Popen(["r2r", outfolder + "/" + group + ".sto", outfolder + "/" + group + ".pdf"], stdout = PIPE)
+    sleep(0.5)
+    p = Popen(["r2r", outfolder + "/" + group + ".sto", outfolder + "/" + group + ".pdf"], stdout=PIPE)
+    #fix known r2r base-pair issue if PDF not created
 
 
 def run_infernal(lock, cmfile, rnd, basefolder, outfolder, cpus=1, score=0.0, mpi=False):
@@ -169,7 +170,7 @@ def run_infernal(lock, cmfile, rnd, basefolder, outfolder, cpus=1, score=0.0, mp
             seqs = LoadSeqs(basefolder + "R" + str(rnd) + "/R" + str(rnd) + "-Unique-Remaining.fasta", moltype=RNA, aligned=False)
         else:
             seqs = LoadSeqs(basefolder + "R" + str(rnd) + "/R" + str(rnd) + "-Unique.fasta", moltype=RNA, aligned=False)
-        params = {'-g' : True, '--toponly' : True, '--cpu' : cpus}  # '--notrunc' : True, 
+        params = {'-g': True, '--mid': True, '--Fmid': 0.0002, '--toponly': True, '--cpu': cpus}  # '--notrunc': True,
         if mpi:
             params['mpi'] = True
         result = cmsearch_from_file(cmfile, seqs, RNA, cutoff=score, params=params)

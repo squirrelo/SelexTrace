@@ -8,7 +8,7 @@ from cogent.parse.fastq import MinimalFastqParser
 from cogent import LoadSeqs
 from remove_duplicates import remove_duplicates
 from tempfile import mktemp
-from time import clock
+from time import time
 import argparse
 
 
@@ -90,11 +90,11 @@ if __name__ == "__main__":
         #convert fastq to fasta if needed
         if args.q:
             print "==Converting to FASTA=="
-            f = open(currfolder + ".fasta", 'w')
+            f = open(folderout + basename + ".fasta", 'w')
             for header, seq, qual in MinimalFastqParser(folderin+filein, strict=False):
                 f.write(''.join([">", header, '\n', seq, '\n']))
             f.close()
-            filein = currfolder + ".fasta"
+            filein = folderout + basename + ".fasta"
             seqs = 0
 
         print "==Cleaning input sequences=="
@@ -105,26 +105,26 @@ if __name__ == "__main__":
         #strip primers from sequences, print out not stripped to be safe
         #allowing up to 2 mismatches in the primer
         print "Primer stripping"
-        secs = clock()
+        secs = time()
         kept, rem = strip_primer(filein, args.p, 2)
         log.write("Primer stripping\n" + str(len(kept)) + " sequences left, " + \
         str(len(rem)) + " sequences removed")
         print str(len(kept)) + " sequences left, " + \
-        str(len(rem)) + " sequences removed. " + str((clock() - secs)/60) + " minutes\n"
+        str(len(rem)) + " sequences removed. " + str((time() - secs)/60) + " minutes\n"
         write_fasta_list(kept, currfolder + "-Stripped.fasta")
         write_fasta_list(rem, currfolder + "-NotStripped.fasta")
         rem = 0
         #remove all sequences with Ns and short sequences
         print "Remove short and ambiguous sequences"
-        secs = clock()
+        secs = time()
         kept = rem_N_short(kept, args.l)
         log.write("Remove short and ambiguous sequences\n" + str(len(kept)) + " sequences left\n")
-        print str(len(kept)) + " sequences left. " + str((clock() - secs)/60) + " minutes"
+        print str(len(kept)) + " sequences left. " + str((time() - secs)/60) + " minutes"
         write_fasta_list(kept, currfolder + "-CleanStripped.fasta")
 
         #remove duplicate sequences from the fasta file and store for later
         print "Remove duplicates"
-        secs = clock()
+        secs = time()
         kept, headers = remove_duplicates(kept)
         write_fasta_list(kept, currfolder + "-Unique.fasta")
         #write out file holding headers keyed to a sequence
@@ -136,5 +136,5 @@ if __name__ == "__main__":
             keyfile.write("\n")
         keyfile.close()
         log.write("Remove duplicates\n" + str(len(kept)) + " sequences left")
-        print str(len(kept)) + " sequences left. " + str((clock() - secs)/60) + " minutes\n"
+        print str(len(kept)) + " sequences left. " + str((time() - secs)/60) + " minutes\n"
         log.close()

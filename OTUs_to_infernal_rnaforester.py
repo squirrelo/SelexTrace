@@ -2,6 +2,7 @@
 import sys
 from os.path import exists
 from os import mkdir, remove, walk
+from clean_seqs import write_fasta_list
 from cogent import LoadSeqs, RNA
 from cogent.app.locarna import create_locarnap_alignment
 from cogent.app.infernal_v11 import cmsearch_from_file, cmbuild_from_file, calibrate_file
@@ -100,18 +101,21 @@ def run_locarnap_for_infernal(currgroup, clusters, otus, basefolder):
     #make sure group has enough sequences before continuing
     #run locarna-p on the at most 50 most abundant sequences in the group
     aln, struct = run_locarnap(seqs, 50, cpus=2, foldless=True)
+
+    #create output folder for group
+    mkdir(currotufolder)
     if(aln.getNumSeqs() < 50):
         out += str(aln.getNumSeqs()) + " unique sequences\n"
+        fout = open(currotufolder + "/unique.fasta", 'w')
+        fout.write(aln.toFasta())
+        fout.close() 
     else:
         s, h = remove_duplicates(seqs)
         out += str(len(s)) + " unique sequences\n"
-        s = 0
-        h = 0
+        write_fasta_list(s,currotufolder + "/unique.fasta")
     out += "Structure: " + struct + "\n"
 
     #write out alignment and structure in fasta and stockholm formats
-    #create output folder for group
-    mkdir(currotufolder)
     #write that shit
     logout = open(currotufolder + "/log.txt", 'w')
     logout.write(out)
@@ -170,7 +174,7 @@ def run_infernal(lock, cmfile, rnd, basefolder, outfolder, cpus=1, score=0.0, mp
             seqs = LoadSeqs(basefolder + "R" + str(rnd) + "/R" + str(rnd) + "-Unique-Remaining.fasta", moltype=RNA, aligned=False)
         else:
             seqs = LoadSeqs(basefolder + "R" + str(rnd) + "/R" + str(rnd) + "-Unique.fasta", moltype=RNA, aligned=False)
-        params = {'-g': True, '--mid': True, '--Fmid': 0.0002, '--toponly': True, '--cpu': cpus}  # '--notrunc': True,
+        params = {'--mid': True, '--Fmid': 0.0002, '--toponly': True, '--cpu': cpus}  # '-g': True, '--notrunc': True,
         if mpi:
             params['mpi'] = True
         result = cmsearch_from_file(cmfile, seqs, RNA, cutoff=score, params=params)

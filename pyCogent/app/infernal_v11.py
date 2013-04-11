@@ -1067,12 +1067,15 @@ def cmbuild_from_file(stockholm_file_path, refine=False,calibrate=False, \
         calibrate=calibrate, return_alignment=return_alignment,params=params)
     return res
 
-def calibrate_file(cm_file_path):
+def calibrate_file(cm_file_path, params=None):
     '''calls cmcalibrate on CM file passed
 
         -cm_file_path: Path to the CM built by cmbuild
     '''
-    app = Cmcalibrate(WorkingDir='/tmp')
+    if params is None:
+        params = {}  
+
+    app = Cmcalibrate(WorkingDir='/tmp', params=params)
     res = app(cm_file_path)
     return res['ExitStatus']
 

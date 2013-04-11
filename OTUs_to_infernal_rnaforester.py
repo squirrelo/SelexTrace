@@ -408,7 +408,7 @@ if __name__ == "__main__":
             cmfile.write(cmbuild_from_file(currotufolder + "/locarnap-aln.sto"))
             cmfile.close()
             cmfile = currotufolder + "/infernal_" + group + ".cm"
-            calibrate_file(cmfile)
+            calibrate_file(cmfile, params={'--cpu': args.c})
 
             #Run all rounds of selection through infernal at once
             #make a pool of workers, one for each cpu available

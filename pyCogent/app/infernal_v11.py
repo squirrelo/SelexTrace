@@ -838,7 +838,7 @@ class Cmsearch(CommandLineApplication):
 
     # --Fmid <x> Set P-value threshold for HMM stages to <x>. Default 0.02
     # Used with --mid
-    '--Fmid':ValuedParameter(Prefix='--',Name='FZ',Delimiter=' '),\
+    '--Fmid':ValuedParameter(Prefix='--',Name='Fmid',Delimiter=' '),\
 
     # --notrunc Do not allow truncated hits at sequence termini
     '--notrunc':FlagParameter(Prefix='--',Name='notrunc'),\

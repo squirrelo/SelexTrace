@@ -141,7 +141,7 @@ def score_rnaforester(struct1, struct2):
 
 def group_by_forester(filein, foresterscore):
     '''run rnaforester clustering and return list of cluster groups'''
-    p = Popen(["rnaforester", "--score", "-m", "-r", "-mt=" + str(foresterscore), "-f", filein], stdout=PIPE)
+    p = Popen(["rnaforester", "--score", "-m", "-r", "-mc=" + str(foresterscore), "-f", filein], stdout=PIPE)
     lines = p.communicate()[0].split("\n")
     structclust = []
     for group in cluster_parser(lines):
@@ -182,7 +182,7 @@ def run_infernal(lock, cmfile, rnd, basefolder, outfolder, cpus=1, score=0.0, mp
             seqs = LoadSeqs(basefolder + "R" + str(rnd) + "/R" + str(rnd) + "-Unique-Remaining.fasta", moltype=RNA, aligned=False)
         else:
             seqs = LoadSeqs(basefolder + "R" + str(rnd) + "/R" + str(rnd) + "-Unique.fasta", moltype=RNA, aligned=False)
-        params = {'--mid': True, '--Fmid': 0.0002, '--toponly': True, '--cpu': cpus}  # '-g': True, '--notrunc': True,
+        params = {'--mid': True, '--Fmid': 0.0002, '--toponly': True, '--notrunc': True, '--cpu': cpus}  # '-g': True, '--notrunc': True,
         if mpi:
             params['mpi'] = True
         result = cmsearch_from_file(cmfile, seqs, RNA, cutoff=score, params=params)

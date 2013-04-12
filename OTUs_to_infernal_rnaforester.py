@@ -157,10 +157,21 @@ def make_r2r(insto, outfolder, group):
     '''generates R2R secondary structure pdf with default colorings'''
     p = Popen(["r2r", "--GSC-weighted-consensus", insto, outfolder + "/" + group + ".sto", \
         "3", "0.97", "0.9", "0.75", "4", "0.97", "0.9", "0.75", "0.5", "0.1"])
-    sleep(0.5)
+    p.wait()
     p = Popen(["r2r", outfolder + "/" + group + ".sto", outfolder + "/" + group + ".pdf"], stdout=PIPE)
+    retcode = p.wait()
     #fix known r2r base-pair issue if PDF not created
-
+    if retcode != 0:
+        fin = open(outfolder + "/" + group + ".sto", 'U')
+        sto = fin.readlines()
+        fin.close()
+        sto[-2] = "#=GF R2R SetDrawingParam autoBreakPairs true\n"
+        sto[-1] = "//\n"
+        fout = open(outfolder + "/" + group + ".sto", 'w')
+        fout.write(''.join(sto))
+        fout.close()
+        p = Popen(["r2r", outfolder + "/" + group + ".sto", outfolder + "/" + group + ".pdf"], stdout=PIPE)
+        p.wait()
 
 def run_infernal(lock, cmfile, rnd, basefolder, outfolder, cpus=1, score=0.0, mpi=False):
     try:

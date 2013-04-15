@@ -28,6 +28,7 @@ def remove_duplicates(seqsin):
     
     uniques = {}
     counts = defaultdict(int)
+    #uniquesret: standard (header, seq) tuple list of unique sequeces
     #repseqs: dict of lists keyed to a sequence. Holds all headers of duplicate 
     #sequences with that sequence
     repseqs = defaultdict(list)
@@ -51,17 +52,18 @@ def remove_duplicates(seqsin):
 
 if __name__ == "__main__":
     from sys import argv, exit
-    folderout = argv[2]
-    if folderout[:-1] != "/":
-        folderout += "/"
+    
     if len(argv) < 3:
         print "remove_duplicates.py /path/to/finein.fasta /path/to/folder/out"
         exit(1)
+    folderout = argv[2]
+    if folderout[:-1] != "/":
+        folderout += "/"
     seqs = [(header, seq) for header, seq in MinimalFastaParser(open(argv[1]))]
-    uniques = remove_duplicates(seqs)
+    uniques, headers = remove_duplicates(seqs)
     csvout = open(folderout + "Unique_sequences.csv", 'w')
     csvout.write("Count,Header,Sequence")
     fastaout = open(folderout + "Unique_sequences.fasta", 'w')
     for seq in uniques:
         fastaout.write('>%s\n%s\n' % (seq[0], seq[1]))
-        csvout.write('%s,%s,%s\n' % (seq[2],seq[0],seq[1]))
+        csvout.write('%s,%s,%s\n' % (seq[0].split("_")[1],seq[0],seq[1]))

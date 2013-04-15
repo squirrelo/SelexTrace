@@ -7,7 +7,6 @@ from cogent import LoadSeqs, RNA
 from cogent.app.locarna import create_locarnap_alignment
 from cogent.app.infernal_v11 import cmsearch_from_file, cmbuild_from_file, calibrate_file
 from cogent.parse.fasta import MinimalFastaParser
-from cogent.parse.rnaforester import cluster_parser
 from cogent.format.stockholm import stockholm_from_alignment
 from remove_duplicates import remove_duplicates
 from subprocess import Popen, PIPE
@@ -70,7 +69,9 @@ def run_locarnap(seqsin, numkept, cpus=1,foldless=False):
     #cut to numkept most abundant sequences
     if len(seqs) > numkept:
         seqs = seqs[:numkept]
-    return create_locarnap_alignment(seqs, RNA, struct=True, params={'--cpus':cpus})
+    aln, struct = create_locarnap_alignment(seqs, RNA, struct=True, params={'--cpus':cpus})
+    struct = struct.replace('-', ".")
+    return aln, struct
 
 
 def run_locarnap_groups(otulist, clusters, numkept, cpus=1, foldless=False):
@@ -134,23 +135,30 @@ def run_locarnap_for_infernal(currgroup, clusters, otus, basefolder):
 
 def score_rnaforester(struct1, struct2):
     '''returns relative score of two structures'''
+    #return gigantically negative number if no structure for one struct
+    if "(" not in struct1 or "(" not in struct2:
+        raise ValueError(struct1 + "\n" + struct2 + "\nNo pairing in given structures!")
     p = Popen(["RNAforester", "--score", "-r"], stdin=PIPE, stdout=PIPE)
     p.stdin.write(''.join([struct1, "\n", struct2, "\n&"]))
     return float(p.communicate()[0].split("\n")[-2])
 
 
-def group_by_forester(filein, foresterscore):
-    '''run rnaforester clustering and return list of cluster groups'''
-    p = Popen(["rnaforester", "--score", "-m", "-r", "-mc=" + str(foresterscore), "-f", filein], stdout=PIPE)
-    lines = p.communicate()[0].split("\n")
-    structclust = []
-    for group in cluster_parser(lines):
-        numclust = int(group[2].split(':')[1])
-        cluster = []
-        for n in range(numclust):
-            cluster.append(group[(4+n)].split()[0])
-        structclust.append(cluster)
-    return structclust
+def group_by_forester(structgroups, foresterscore):
+    topop = set([])
+    for currstruct in structgroups: #for each structure
+        if currstruct in topop: #skip if we already grouped this one
+            continue
+        for teststruct in structgroups: #else compare it to all other structures
+            #only compare if not equal or not already grouped
+            if teststruct != currstruct and teststruct not in topop:
+                score = score_rnaforester(currstruct, teststruct)
+                if score > foresterscore:
+                    structgroups[currstruct].extend(structgroups[teststruct])
+                    structgroups[teststruct] = 0
+                    topop.add(teststruct)
+    for key in topop: #pop all simmilar structures found
+        structgroups.pop(key)
+    return structgroups
 
 
 def make_r2r(insto, outfolder, group):
@@ -173,6 +181,7 @@ def make_r2r(insto, outfolder, group):
         p = Popen(["r2r", outfolder + "/" + group + ".sto", outfolder + "/" + group + ".pdf"], stdout=PIPE)
         p.wait()
 
+
 def run_infernal(lock, cmfile, rnd, basefolder, outfolder, cpus=1, score=0.0, mpi=False):
     try:
         seqs = 0
@@ -182,7 +191,7 @@ def run_infernal(lock, cmfile, rnd, basefolder, outfolder, cpus=1, score=0.0, mp
             seqs = LoadSeqs(basefolder + "R" + str(rnd) + "/R" + str(rnd) + "-Unique-Remaining.fasta", moltype=RNA, aligned=False)
         else:
             seqs = LoadSeqs(basefolder + "R" + str(rnd) + "/R" + str(rnd) + "-Unique.fasta", moltype=RNA, aligned=False)
-        params = {'--mid': True, '--Fmid': 0.0002, '--toponly': True, '--notrunc': True, '--cpu': cpus}  # '-g': True, '--notrunc': True,
+        params = {'--mid': True, '--Fmid': 0.0002, '--notrunc': True, '--toponly': True, '--cpu': cpus}  # '-g': True, 
         if mpi:
             params['mpi'] = True
         result = cmsearch_from_file(cmfile, seqs, RNA, cutoff=score, params=params)
@@ -292,49 +301,105 @@ if __name__ == "__main__":
     #read in all structures now that they are folded
     structgroups = {}
     cfo = open(otufolder + "cluster_structs.fasta", 'rU')
+    nostructout = open(otufolder + "unstructured_clusters.txt", 'w')
     for cluster, struct in MinimalFastaParser(cfo):
+        #remove unstructured groups and print to file for examination
+        if "(" not in struct:
+            print cluster + ": NO STRUCTURE PREDICTED"
+            nostructout.write(cluster + "\t" + struct + "\n")
+            continue
         if struct in structgroups:
             structgroups[struct].append(cluster)
         else:
             structgroups[struct] = [cluster]
     cfo.close()
-
+    nostructout.close()
     print "Runtime: " + str((time() - secs)/60) + " min"
     print "==Grouping clusters by secondary structure=="
     #GROUP THE SECONDARY STRUCTURES BY RNAFORESTER
     #logic: first item in list is always unique, so use as base
     #for comparison. That way when list empty, all are grouped
     secs = time()
-    structgroups = []   
-    print "RNAforester score threshold: " + str(foresterscore)
-    #Now need to iteratively refine the groups down
-    #check to make sure we need to first
-    if not exists(otufolder + "groups.txt"):
-        #run clustering if groups file doesnt exist
-        secs = time()
-        #initial clustering by structures generated in first folding
-        structgroups = group_by_forester(otufolder + "cluster_structs.fasta", foresterscore)
-        gout = open(otufolder + "groups.txt", 'w')
-        gout.write(str(foresterscore) + "\n")
-        for group in structgroups:
-            gout.write('\t'.join(group) + "\n")
-        gout.close()
-        print str(len(structgroups)) + " final groups (" + str((time() - secs)/60)+ "m)"
-    else:
-        #if groups already exist, read them in
+    skipiter = False
+    #if groups already exist, read them in
+    if exists(otufolder + "groups.txt"):
+        structgroups = {}
         gin = open(otufolder + "groups.txt", 'rU')
         foresterscore = float(gin.readline().strip())
         for line in gin:
-            structgroups.append(line.strip().split('\t'))
+            if line.strip() == "FINAL": 
+                skipiter = True
+            else:
+                lineinfo = line.split(':')
+                structgroups[lineinfo[0]] = lineinfo[1].strip().split()
         gin.close()
+    print "RNAforester score threshold: " + str(foresterscore)
+    #Now need to iteratively refine the groups down
+    #check to make sure we need to first
+    if not args.inf and not skipiter:
+        startcount = 1
+        endcount = 0
+        iteration = 0
+        secs = time()
+        print "iteration " + str(iteration) + ": " + str(len(structgroups)) + " initial groups"
+        #initial clustering by structures generated in first folding
+        structgroups = group_by_forester(structgroups, foresterscore)
+        gout = open(otufolder + "groups.txt", 'w')
+        gout.write(str(foresterscore) + "\n")
+        for group in structgroups:
+            gout.write(group + ":")
+            for g in structgroups[group]:
+                gout.write(g+" ")
+            gout.write("\n")
+        gout.close()
+        iteration += 1
+
+        while startcount != endcount: #keep refining while we are still grouping structs
+            startcount = len(structgroups)
+            print "iteration " + str(iteration) + ": " + str(len(structgroups)) + " initial groups"
+            #Refold all the groups to get new consensus secondary structure
+            #make a pool of workers, one for each cpu available
+            manager = Manager()
+            hold = manager.dict()
+            pool = Pool(processes=args.c)
+            #run the pool over all groups to get structures for new groups
+            for struct in structgroups:
+                pool.apply_async(func=fold_groups, args=(otus, structgroups[struct], struct, hold))
+            pool.close()
+            pool.join()
+            
+            #need to turn manager dict to regular dict
+            structgroups = {}
+            for key in hold.keys():
+                structgroups[key] = hold[key]
+
+            structgroups = group_by_forester(structgroups, foresterscore)
+            endcount = len(structgroups)
+            #write out file with groups
+            gout = open(otufolder + "groups.txt", 'w')
+            gout.write(str(foresterscore) + "\n")
+            for group in structgroups:
+                gout.write(group + ":")
+                for g in structgroups[group]:
+                    gout.write(g+" ")
+                gout.write("\n")
+            gout.close()
+            iteration += 1
+        #end while
+
+        print str(len(structgroups)) + " final groups (" + str((time() - secs)/60)+ "m)"
+        gout = open(otufolder + "groups.txt", 'a')
+        gout.write("FINAL\n")
+        gout.close()
+    else:
         print str(len(structgroups)) + " final groups"
 
     print "==Creating CM and r2r structures=="
     secs = time()
     pool = Pool(processes=int(ceil(args.c/2)))
     #run the pool over all clusters to get file of structures
-    for groupnum,currgroup in enumerate(structgroups):
-        pool.apply_async(func=run_locarnap_for_infernal, args=(groupnum+1, currgroup, otus, otufolder))
+    for group,currstruct in enumerate(structgroups):
+        pool.apply_async(func=run_locarnap_for_infernal, args=(group+1, structgroups[currstruct], otus, otufolder))
     pool.close()
     pool.join()
     print "Runtime: " + str((time() - secs)/60)+ "m"
@@ -366,7 +431,7 @@ if __name__ == "__main__":
             cmfile.write(cmbuild_from_file(currotufolder + "/locarnap-aln.sto"))
             cmfile.close()
             cmfile = currotufolder + "/infernal_" + group + ".cm"
-            calibrate_file(cmfile, params={'--cpu': args.c})
+            calibrate_file(cmfile)
 
             #Run all rounds of selection through infernal at once
             #make a pool of workers, one for each cpu available

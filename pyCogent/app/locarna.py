@@ -321,8 +321,11 @@ class MLocarna(LocARNA):
             
         result['ClustalAlignment'] = \
             ResultPath(Path=out_path+'/results/result.aln',IsWritten=True)
-        result['Structure'] = \
-            ResultPath(Path=out_path+'/alifold.out',IsWritten=True)
+        #result['Structure'] = \
+        #    ResultPath(Path=out_path+'/alifold.out',IsWritten=True)
+        if  self.Parameters['--probabilistic'].isOn():
+            result['ProbabilisticAlignment'] = \
+            ResultPath(Path=out_path+'/results/result_prog.aln',IsWritten=True)
         return result
 
 def create_locarnap_alignment(seqs,moltype,struct=False,params=None):
@@ -351,7 +354,25 @@ def create_locarnap_alignment(seqs,moltype,struct=False,params=None):
     app.Parameters['--probabilistic'].on()
     app.Parameters['--consistency-transformation'].on()
     res = app(int_map.toFasta())
-    #print "RESULTS:\n" + ''.join(res["StdOut"].readlines())
+    #get the structure from the results if necessary
+    if struct:
+        structfile = open(res['ProbabilisticAlignment'].name, 'U')
+        structure = ""
+        newstrline = True
+        for line in structfile:
+            line = line.strip()
+            #read in structure lines of alignment (--write-structure)
+            if len(line) > 0 and (line[0] == "." or line[0] == "("):
+                #only append if new structure aspect, since struct is 
+                #written both above and below blocks in alignment
+                if newstrline:
+                    structure += line
+                    newstrline = not newstrline
+                else:
+                    newstrline = not newstrline
+        
+
+
     aligned = dict(ClustalParser(res['ClustalAlignment']))
     
     #Make new dict mapping original IDs
@@ -360,17 +381,13 @@ def create_locarnap_alignment(seqs,moltype,struct=False,params=None):
         new_alignment[int_keys.get(k,k)]=v
     #Create an Alignment object from alignment dict
     new_alignment = Alignment(new_alignment,MolType=moltype)
+
+    #Clean up after MlocARNA
+    res.cleanUp()
+    shutil.rmtree(mlocarna_dir)
+
     #output alignment and structure if asked for, else outout just alignment
     if struct:
-        #get consensus structure as string
-        structfile = file(mlocarna_dir + "/alifold.out", 'rU').readlines()
-        structure = structfile[-1].strip()
-        #Clean up after MlocARNA
-        res.cleanUp()
-        shutil.rmtree(mlocarna_dir)
         return new_alignment, structure
     else:
-        #Clean up after MlocARNA
-        res.cleanUp()
-        shutil.rmtree(mlocarna_dir)
         return new_alignment

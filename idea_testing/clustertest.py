@@ -1,18 +1,43 @@
-from qiime.pick_otus import UclustOtuPicker
+from cogent.app.uclust import Uclust, clusters_from_uc_file
+from cogent.parse.fasta import MinimalFastaParser
 from sys import argv
 
+#clustertest.py /path/to/unique/fasta/in.fasta path/to/folder/out simmilarity
 
 if __name__ == "__main__":
     if argv[2][-1] != "/":
         argv[2] += "/"
 
-    uclust = UclustOtuPicker({'Similarity': float(argv[3]), 'output_dir': argv[2],
-        'gapopen': 10.0, 'gapext': 1.0})
-    results = uclust(argv[1], 
-        log_path=argv[2] + argv[3] + "_clusters_log.txt")
-    if results != None:
-        print "RESULTS: ", len(results)
-        otusout = open(argv[2]+ argv[3] + "_clusters.txt", 'w')
-        for result in results:
-            otusout.write(str(result) + "\t" + "\t".join(results[result]) + "\n")
-        otusout.close()
+    params = {
+        '--log': argv[2] + argv[3] + "_clusters.log",
+        '--usersort': False,
+        '--id': float(argv[3]),
+        '--maxaccepts': 20,
+        '--maxrejects': 500,
+        '--stepwords': 20,
+        '--w': 12,
+        '--gapopen': '10.0',
+        '--gapext': '10.0',
+    }
+    uclust = Uclust(params, WorkingDir='/tmp')
+    input_data = {
+        '--input': argv[1],
+        '--uc': argv[2] + argv[3] + "_clusters.uc"
+    }
+    result = uclust(input_data)
+    clusters, failures, new_seeds = clusters_from_uc_file(result['ClusterFile'])
+    print "RESULTS: ", len(clusters)
+    headers = {}
+    for header, seq in MinimalFastaParser(open(argv[1])):
+        headers[header.split()[0]] = header
+    otusout = open(argv[2] + argv[3] + "_clusters.txt", 'w')
+    for group, cluster in enumerate(clusters):
+        otusout.write(str(group) + "\t")
+        #map headers back to orignal ones with counts
+        for header in clusters[cluster]:
+            otusout.write(headers[header] + "\t")
+        otusout.write("\n")
+    otusout.close()
+    #log = open(argv[2] + argv[3] + "_clusters.log", 'w')
+    #log.write('\n'.join(input_data) + '\n'.join(params) +
+    #    "clusters: " + str(len(clusters)) + "\n")

@@ -97,7 +97,7 @@ def run_locarnap_for_infernal(currgroup, clusters, otus, basefolder):
     for cluster in clusters:
         out += cluster + " "
         for header, seq in MinimalFastaParser(open(otus[cluster], 'rU')):
-            seqs.append((header, seq))
+            seqs.append((header.split()[0], seq))
     out += "\n" + str(len(seqs)) + " sequences\n"
     #make sure group has enough sequences before continuing
     #run locarna-p on the at most 50 most abundant sequences in the group

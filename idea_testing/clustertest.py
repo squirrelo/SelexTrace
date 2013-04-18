@@ -13,20 +13,20 @@ if __name__ == "__main__":
         mkdir(argv[2])
 
     params = {
-        '--log': argv[2] + argv[3] + "_clusters.log",
         '--usersort': False,
         '--id': float(argv[3]),
         '--maxaccepts': 20,
         '--maxrejects': 500,
         '--stepwords': 20,
-        '--w': 12,
-        '--gapopen': '10.0',
-        '--gapext': '10.0',
+        '--w': 12
+        #'--gapopen': '10.0',
+        #'--gapext': '10.0',
     }
     uclust = Uclust(params, WorkingDir='/tmp')
     input_data = {
         '--input': argv[1],
-        '--uc': argv[2] + argv[3] + "_clusters.uc"
+        '--uc': argv[2] + argv[3] + "_clusters.uc",
+        '--log': argv[2] + argv[3] + "_clusters.log"
     }
     result = uclust(input_data)
     clusters, failures, new_seeds = clusters_from_uc_file(result['ClusterFile'])

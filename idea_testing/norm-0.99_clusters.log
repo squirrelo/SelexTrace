@@ -1,0 +1,93 @@
+uclust --input /home/squirrel/Desktop/Ely_selection/R7/R7-Unique.fasta --usersort --maxaccepts 20 --id 0.99 --uc /home/squirrel/Repositories/SelexTrace/idea_testing/norm-0.99_clusters.uc --w 12 --stepwords 20 --maxrejects 500 --log /home/squirrel/Repositories/SelexTrace/idea_testing/norm-0.99_clusters.log
+Started Thu Apr 18 10:21:25 2013
+Version 1.2.22
+
+
+Database search:
+    Nucleo  Alphabet
+ Plus only  Strand(s)
+        20  Max accepts
+       500  Max rejects
+        12  Word length for unique word matching
+        On  Word count rejection
+        20  Step words
+        50  Bump percent
+
+Alignment:
+      2.00  Match score
+     -1.00  Mis-match score
+        On  Fast heuristics
+        32  HSP length
+         4  Word length for HSP finding
+      1.00  Minimum score/col of HSP
+        16  Band radius
+     10.00  Open penalty (internal gaps)
+      0.50  Open penalty (end gaps)
+      1.00  Ext. penalty (internal gaps)
+      0.50  Ext. penalty (end gaps)
+
+                        Counter            N
+--------------------------------  ----------
+                          Search       78.5k
+                         HotHits        278M
+                            Step      379.8k
+                 AlignCurrToSeed         33M
+                       PWA_Align         33M
+
+Ticks/sec 3.4G
+                            What           N       Ticks        Secs      Pct
+--------------------------------  ----------  ----------  ----------  -------
+                 ViterbiFastBand         27M     1.9e+11       00:55     49.5%
+                      WF_GetHSPs         33M     3.7e+10       00:10      9.6%
+             GetFractIdGivenPath         19M     3.1e+10      9.078s      8.1%
+                 U_SetWordCounts       78.5k     2.6e+10      7.768s      6.9%
+                   WF_SeqToWords         33M     2.5e+10      7.311s      6.5%
+                            Sort       78.5k     2.5e+10      7.249s      6.5%
+                    U_SetHotHits       78.5k     1.2e+10      3.466s      3.1%
+                    TraceBackBit         27M     4.8e+09      1.417s      1.3%
+                  WF_ResolveHSPs         33M     4.5e+09      1.330s      1.2%
+                        AddWords       69.6k     4.1e+09      1.219s      1.1%
+                     PWA_AlignSP         43M     2.5e+09      0.744s      0.7%
+                    MxBase_Alloc         27M     2.1e+09      0.604s      0.5%
+                    PWA_AlignNCF         19M     1.9e+09      0.562s      0.5%
+               WX_GetUniqueWords      148.0k     5.9e+08      0.174s      0.2%
+                         WF_SetA       74.2k     1.1e+08      0.031s      0.0%
+                      GetNextSeq       78.5k     9.8e+07      0.029s      0.0%
+                       U_AddSeed       69.6k     8.6e+07      0.025s      0.0%
+                  SeqToWordsStep       78.5k     5.6e+07      0.017s      0.0%
+                    CompressPath        8897     3.5e+07      0.010s      0.0%
+                      SeqToWords       69.6k     2.9e+07      0.008s      0.0%
+                U_AllocSeedCount           5     3.3e+06      0.96ms      0.0%
+                MxBase_AllocData           4     2.3e+05      0.07ms      0.0%
+                U_AllocSeqLength           1     1.5e+04      0.00ms      0.0%
+                 MxBase_FreeData           4     4.2e+03      0.00ms      0.0%
+                      WF_AllocLA           2     1.8e+03     5.2e-07      0.0%
+                      WF_AllocLB           1     1.1e+02     3.3e-08      0.0%
+--------------------------------              ----------     -------
+                           Total                 3.8e+11       01:51     95.8%
+Windex memory 305M bytes
+
+Windex::LogWordStats()
+Word length 12, nr. words 17M
+Total words: 5.8M
+Seqs/word: max = 67608.0, mean = 0.3, median = 0.0
+
+Top words:
+ Nr. seeds  Word
+----------  ----
+     67608  AAGCTAATGCAC
+     67603  CAAGCTAATGCA
+     67586  AGCTAATGCACT
+     67544  GCTAATGCACTC
+     67308  CCAAGCTAATGC
+     67266  GTCCAAGCTAAT
+     67243  TCCAAGCTAATG
+     67155  GGTCCAAGCTAA
+     66956  TCGGTCCAAGCT
+     66953  CGGTCCAAGCTA
+
+78468 seqs, 69571 clusters, avg size 1.1, avg id 99.9%
+
+Finished Thu Apr 18 10:23:18 2013
+Elapsed time 01:53
+Max memory 411Mb

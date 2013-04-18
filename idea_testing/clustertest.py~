@@ -2,6 +2,7 @@ from cogent.app.uclust import Uclust, clusters_from_uc_file
 from cogent.parse.fasta import MinimalFastaParser
 from sys import argv
 from os.path import exists
+from os import mkdir
 
 #clustertest.py /path/to/unique/fasta/in.fasta path/to/folder/out simmilarity
 

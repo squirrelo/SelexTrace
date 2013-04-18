@@ -18,9 +18,9 @@ if __name__ == "__main__":
         '--maxaccepts': 20,
         '--maxrejects': 500,
         '--stepwords': 20,
-        '--w': 12
-        #'--gapopen': '10.0',
-        #'--gapext': '10.0',
+        '--w': 12,
+        '--gapopen': '50.0',
+        '--gapext': '50.0'
     }
     uclust = Uclust(params, WorkingDir='/tmp')
     input_data = {

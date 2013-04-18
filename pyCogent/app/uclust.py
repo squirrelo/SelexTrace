@@ -100,18 +100,18 @@ class Uclust(CommandLineApplication):
         '--log':ValuedParameter('--', Name='log', Delimiter=' ',
             IsPath=True),
 
+        # Gap penalty for opening a gap (see manual)
+        '--gapopen':ValuedParameter('--',Name='gapopen',Delimiter=' '),
+
+        # Gap penalty for extending a gap (see manual)
+        '--gapext':ValuedParameter('--',Name='gapext',Delimiter=' '),
+
         # Don't assume input is sorted by length (default assume sorted).
         '--usersort':FlagParameter('--',Name='usersort'),
         
         # Same as --maxrejects 0 --nowordcountreject.
         # comes with a performance hit.
         '--exact':FlagParameter('--',Name='exact'),
-
-        # Penalty for gap opening (see manual for format)
-        '--gapopen':ValuedParameter('--',Name='gapopen',Delimiter=' '),
-
-        # Penalty for gap extension (see manual for format)
-        '--gapext':ValuedParameter('--',Name='gapext',Delimiter=' '),
 
         # Same as --maxrejects 0 --maxaccepts 0 --nowordcountreject -- 
         # comes with a performance hit.
@@ -127,8 +127,8 @@ class Uclust(CommandLineApplication):
         """ Set the input path (a fasta filepath)
         """
         # The list of values which can be passed on a per-run basis
-        allowed_values = ['--input', '--uc', '--fastapairs',
-                           '--uc2clstr', '--output', '--mergesort', '--log']
+        allowed_values = ['--input','--uc','--fastapairs',\
+                           '--uc2clstr','--output','--mergesort', '--log']
         
         unsupported_parameters = set(data.keys()) - set(allowed_values)
         if unsupported_parameters:
@@ -162,10 +162,6 @@ class Uclust(CommandLineApplication):
         result['PairwiseAlignments'] = ResultPath(
          Path = self.Parameters['--fastapairs'].Value,
          IsWritten=self.Parameters['--fastapairs'].isOn())
-
-        result['Log'] = ResultPath(
-         Path = self.Parameters['--log'].Value,
-         IsWritten=self.Parameters['--log'].isOn())
          
         return result
         

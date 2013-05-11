@@ -223,8 +223,8 @@ if __name__ == "__main__":
     parser.add_argument('-o', required=True, help="Base folder to output all data to")
     parser.add_argument('-r', required=True, type=int, help="Current round of selection\
     clusters come from")
-    parser.add_argument('--sim', required=True, type=float, default=0.97, help="Simmilarity for uclust.\
-    (Default 0.97)")
+    parser.add_argument('--sim', required=True, type=float, default=0.99, help="Simmilarity for uclust.\
+    (Default 0.99)")
     parser.add_argument('--minseqs', type=int, default=100, help="Minimum number of sequences for \
     groups to be significant (Default 100)")
     parser.add_argument('--rsc', type=float, default=0.5, help="Score cutoff for rnaforester \

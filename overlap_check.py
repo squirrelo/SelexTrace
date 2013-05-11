@@ -1,6 +1,7 @@
 from sys import argv
 from os import walk
 from os.path import exists
+from os import walk
 from numpy import zeros
 
 #overlap_check.py basefolder #round
@@ -12,73 +13,63 @@ if __name__ == "__main__":
 
     rnd = "R" + argv[2]
 
-    #get total number fo groups in the round, add 1 for looping
-    sizegroups = len(walk(basefolder).next()[1]) + 1
-    print str(sizegroups-1) + " groups"
 
     #create csv file for data
-    overlapfile = open(basefolder + "overlap.csv", 'w')
+    overlapfile = open(basefolder + rnd + "overlap.csv", 'w')
     #empty first cell of header
     overlapfile.write(",")
+
+    #get all group names
+    groups = [g for g in walk(basefolder).next()[1]]
+    if "fasta_groups" in groups:
+        groups.remove("fasta_groups")
+    sizegroups = len(groups)
+    #get total number fo groups in the round, add 1 for looping
+    print str(sizegroups-1) + " groups"
     #write out all group names for column
-    for x in range(1, sizegroups):
-        overlapfile.write("group" + str(x) + ",")
+    for x in range(sizegroups):
+        overlapfile.write(groups[x] + ",")
     overlapfile.write("\n")
-
-    countmatrix = zeros(shape=(sizegroups-1, sizegroups-1), dtype=int)
     #compare all group sequences to other sequences
-    #starting at 1 for folder name ease
-    for group in range(1, sizegroups):
+    countmatrix = zeros(shape=(sizegroups, sizegroups), dtype=int)
+    for group, gfile in enumerate(groups):
         #write out groupname to csv file as row indicator
-        overlapfile.write("group" + str(group) + ",")
+        overlapfile.write(gfile + ",")
 
-        #check if group was run in infernal
-        #if so, compare seq counts over all groups
-        if exists(basefolder + "group_" + str(group) + "/" + rnd + "hits.txt"):
-            #write out the dashes needed to line up the matrix in file
-            for x in range(1, group):
-                overlapfile.write("-,")
-            #load in headers of current group
-            headers = set([])
-            firstgroup = open(basefolder + "group_" + str(group) + "/" + rnd + "hits.txt")
-            #get rid of header
-            firstgroup.readline()
-            firstgroup.readline()
-            for line in firstgroup:
-                headers.add(line.split()[0])
-            firstgroup.close()
-            dupefile = open(basefolder + "group_" + str(group) + "/" + rnd + "dupes.txt", 'w')
-            #go through all other groups and compare sequence headers
-            for secgroup in range(group, sizegroups):
-                if exists(basefolder + "group_" + str(secgroup) + "/" + rnd + "hits.txt"):
-                    count = 0
-                    if group != secgroup:  # only do comparison if needed
-                        compfile = open(basefolder + "group_" + str(secgroup) + "/" + rnd + "hits.txt")
-                        dupefile.write("Group " + str(secgroup) + "\n")
-                        #get rid of header
-                        compfile.readline()
-                        for line in compfile:
-                            if line.split()[0] in headers:
-                                dupefile.write(line.split()[0] + "\n")
-                                count += 1
-                        compfile.close()
-                    else:  # we are comparing group to itself so only need seq count
-                        count = len(headers)
-                    countmatrix[group-1][secgroup-1] = count
-                    overlapfile.write(str(count) + ",")
-                else:
-                    overlapfile.write("-,")
-                    countmatrix[group-1][secgroup-1] = -1
-        else:
-            for secgroup in range(1, sizegroups):
-                overlapfile.write("-,")
-                countmatrix[group-1][secgroup-1] = -1
+        #compare seq counts over all groups
+        for x in range(group):
+            overlapfile.write("-,")
+        #load in headers of current group
+        headers = set([])
+        firstgroup = open(basefolder + gfile + "/" + rnd + "hits.txt")
+        #get rid of header
+        firstgroup.readline()
+        firstgroup.readline()
+        for line in firstgroup:
+            headers.add(line.split()[0])
+        firstgroup.close()
+        dupefile = open(basefolder + gfile + "/" + rnd + "dupes.txt", 'w')
+        #go through all other groups and compare sequence headers
+        for secgroup in range(group, sizegroups):
+            count = 0
+            if gfile != groups[secgroup]:  # only do comparison if needed
+                compfile = open(basefolder + groups[secgroup] + "/" + rnd + "hits.txt")
+                dupefile.write(groups[secgroup] + "\n")
+                #get rid of header
+                compfile.readline()
+                for line in compfile:
+                    if line.split()[0] in headers:
+                        dupefile.write(line.split()[0] + "\n")
+                        count += 1
+                compfile.close()
+            else:  # we are comparing group to itself so only need seq count
+                count = len(headers)
+            countmatrix[group][secgroup] = count
+            overlapfile.write(str(count) + ",")
         overlapfile.write("\n")
     overlapfile.write("\n")
 
     #now create percentages matrix
-    #dealing with matrix starting at 0: change sizegroups accordingly
-    sizegroups -= 1
     for group in range(sizegroups):
         overlapfile.write("group" + str(group+1) + ",")
         if countmatrix[group][group] != -1:

@@ -56,10 +56,11 @@ def fold_groups(otus, clusters, struct, hold):
 def run_locarnap(seqsin, numkept, cpus=1,foldless=False):
     '''Runs locarna-p on a set of sequences in MinimalFastaParser format
     [(header, seq), (header, seq)] and retgurns alignemtn and structure'''
+    seqs, headers = remove_duplicates(seqsin)
     #blank headers to save memory
     headers = 0
     #make sure group has enough sequences before continuing
-    if len(seqsin) < numkept and not foldless:
+    if len(seqs) < numkept and not foldless:
         return "", ""
     #headers come out in format Header_# so split to get # and sort by abundance
     seqs.sort(reverse=True, key=lambda count: int(count[0].split('_')[1]))
@@ -95,9 +96,11 @@ def run_locarnap_for_infernal(currgroup, clusters, otus, basefolder):
     out = "group " + str(currgroup) + ": "
     for cluster in clusters:
         out += cluster + " "
+        count = 0
         for header, seq in MinimalFastaParser(open(otus[cluster], 'rU')):
-            seqs.append((header, seq))
-    out += "\n" + str(len(seqs)) + " sequences\n"
+            seqs.append((header.split()[0], seq))
+            count += int(header.split("_")[1])
+    out += "\n" + str(count) + " sequences\n"
     #make sure group has enough sequences before continuing
     #run locarna-p on the at most 50 most abundant sequences in the group
     aln, struct = run_locarnap(seqs, 50, cpus=2, foldless=True)
@@ -359,19 +362,19 @@ if __name__ == "__main__":
             print "iteration " + str(iteration) + ": " + str(len(structgroups)) + " initial groups"
             #Refold all the groups to get new consensus secondary structure
             #make a pool of workers, one for each cpu available
-            manager = Manager()
-            hold = manager.dict()
-            pool = Pool(processes=args.c)
+            #manager = Manager()
+            #hold = manager.dict()
+            #pool = Pool(processes=args.c)
             #run the pool over all groups to get structures for new groups
-            for struct in structgroups:
-                pool.apply_async(func=fold_groups, args=(otus, structgroups[struct], struct, hold))
-            pool.close()
-            pool.join()
+            #for struct in structgroups:
+            #    pool.apply_async(func=fold_groups, args=(otus, structgroups[struct], struct, hold))
+            #pool.close()
+            #pool.join()
 
             #need to turn manager dict to regular dict
-            structgroups = {}
-            for key in hold.keys():
-                structgroups[key] = hold[key]
+            #structgroups = {}
+            #for key in hold.keys():
+            #    structgroups[key] = hold[key]
 
             structgroups = group_by_forester(structgroups, foresterscore)
             endcount = len(structgroups)
@@ -395,11 +398,18 @@ if __name__ == "__main__":
         print str(len(structgroups)) + " final groups"
 
     print "==Creating CM and r2r structures=="
+    #make sure we read in the same group order every time by reading file
+    gin = open(otufolder + "groups.txt", 'U')
+    groups = gin.readlines()
+    gin.close()
+    #split each line so you only keep the cluster names as a list
+    structgroups = [group.split(":")[1].split() for group in groups[1:-1]]
+
     secs = time()
     pool = Pool(processes=int(ceil(args.c/2)))
     #run the pool over all clusters to get file of structures
-    for group, currstruct in enumerate(structgroups):
-        pool.apply_async(func=run_locarnap_for_infernal, args=(group+1, structgroups[currstruct], otus, otufolder))
+    for group, currgroup in enumerate(structgroups):
+        pool.apply_async(func=run_locarnap_for_infernal, args=(group+1, currgroup, otus, otufolder))
     pool.close()
     pool.join()
     print "Runtime: " + str((time() - secs) / 60) + "m"
@@ -418,7 +428,7 @@ if __name__ == "__main__":
         logfile = open(otufolder + group + "/log.txt")
         log = logfile.readlines()
         logfile.close()
-        print ''.join(log)
+        print ''.join(log).strip()
         seqs = int(log[1].split()[0])
         skip = False
         if exists(otufolder + group + "/R1hits.txt"):
@@ -465,7 +475,7 @@ if __name__ == "__main__":
             for r in roundhits:
                 hitscsv.write(r.split()[2] + ",")
             hitscsv.write("\n")
-            print "Runtime: " + str((time() - secs) / 60) + "m"
+            print "Runtime: " + str((time() - secs) / 60) + "m\n"
         elif skip:
             print "Group already run"
             logfile = open(otufolder + group + "/log.txt")

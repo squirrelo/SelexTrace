@@ -1,10 +1,9 @@
 #dupestest.py /path/to/OTU.fasta /path/to/folder/out CPUs
-import sys
+from sys import stdout
 from os.path import exists
 from os import mkdir, walk
 from clean_seqs import write_fasta_list
 from cogent import LoadSeqs, RNA
-from cogent.app.locarna import create_locarnap_alignment
 from cogent.app.infernal_v11 import cmsearch_from_file, cmbuild_from_file, calibrate_file
 from cogent.parse.fasta import MinimalFastaParser
 from cogent.format.stockholm import stockholm_from_alignment
@@ -15,9 +14,12 @@ from datetime import datetime
 from multiprocessing import Pool, Manager
 import argparse
 from math import floor, ceil
+from cluster_seqs import cluster_seqs
+from alignment import RNAAlignment, RNAStructureAlignment
+from cogent.app.muscle_v38 import align_unaligned_seqs
 
 
-def fold_clusters(lock, known, otu, otufolder):
+def fold_clusters(lock, cluster, seqs, otufolder):
     '''Function for multithreading.
     Computes structure for a cluster and writes it to file'''
     #assuming that the fasta has 10 or more sequences in it. Safe assumption
@@ -25,113 +27,107 @@ def fold_clusters(lock, known, otu, otufolder):
     #only using 10 because this is initial structure calc so needs to be fast
     #and this gives a very good approximation for the initial rnaforester grouping
     try:
-        struct = ""
-        if otu in known:
-            return 0
-        else:
-            filein = open(otus[otu], 'rU')
-            seqs = [(header, seq) for header, seq in MinimalFastaParser(filein)]
-            filein.close()
-            aln, struct = run_locarnap(seqs, 10, foldless=True)
-            #write structure out to file
-            lock.acquire()
-            cfo = open(otufolder + "cluster_structs.fasta", 'a')
-            cfo.write(">" + otu + "\n" + struct + "\n")
-            cfo.close()
-            lock.release()
+        aln, struct = bayesfold(seqs)
+        #write structure out to file
+        lock.acquire()
+        cfo = open(otufolder + "cluster_structs.fasta", 'a')
+        cfo.write(">" + cluster + "\n" + struct + "\n")
+        cfo.close()
+        #print cluster + ": " + struct
+        #stdout.flush()
+    except Exception, e:
+        print e, "\n", cluster, ":", seqs[1]
+        if "CommandLineAppResult" in str(e):
+            raise Exception("ERROR FOLDING SEQUENCES")
+        stdout.flush()
+        lock.release()
     finally:
         lock.release()
 
 
-def fold_groups(otus, clusters, struct, hold):
+def fold_groups(seqs, struct, hold, numkept=None):
     '''Function for multithreading.
     Recomputes structure for a group'''
-    #compute new structures for each group
-    aln, currstruct = run_locarnap_groups(otus, clusters, 25, foldless=True)
-    if currstruct == "":
-        currstruct = struct
-    hold[currstruct] = structgroups[struct]
+    try:
+        aln, currstruct = bayesfold(seqs)
+        if currstruct == "":
+            currstruct = struct
+        hold[currstruct] = structgroups[struct]
+    except Exception, e:
+        print str(e)
+        stdout.flush()
 
 
-def run_locarnap(seqsin, numkept, cpus=1,foldless=False):
-    '''Runs locarna-p on a set of sequences in MinimalFastaParser format
-    [(header, seq), (header, seq)] and retgurns alignemtn and structure'''
-    seqs, headers = remove_duplicates(seqsin)
-    #blank headers to save memory
-    headers = 0
+def bayesfold(seqsin):
+    '''Runs BayesFold on a set of sequences in MinimalFastaParser format
+    [(header, seq), (header, seq)] and returns alignment and structure'''
     #make sure group has enough sequences before continuing
-    if len(seqs) < numkept and not foldless:
-        return "", ""
-    #headers come out in format Header_# so split to get # and sort by abundance
-    seqs.sort(reverse=True, key=lambda count: int(count[0].split('_')[1]))
-    #cut to numkept most abundant sequences
-    if len(seqs) > numkept:
-        seqs = seqs[:numkept]
-    aln, struct = create_locarnap_alignment(seqs, RNA, struct=True, params={'--cpus': cpus})
-    struct = struct.replace('-', ".")
+    temperature = 37
+    seqs = []
+    aln = align_unaligned_seqs(seqsin, RNA)
+    for item in aln.Seqs:
+        seqs.append(str(item))
+    sequences = RNAAlignment(sequences=seqs)
+    structures = sequences.fold(temperature, 2, 100) 
+    structalign = str(RNAStructureAlignment(sequences,structures,temperature)).split("\n")
+    for line in structalign:
+        if ".." in line:
+            struct = line
+            break
     return aln, struct
 
 
-def run_locarnap_groups(otulist, clusters, numkept, cpus=1, foldless=False):
-    '''runs locarna-p over groups of clusters to get alignment and
-     consensus secondary structure'''
-    seqs = []
-    for cluster in clusters:
-        filein = open(otulist[cluster], 'rU')
-        for header, seq in MinimalFastaParser(filein):
-            seqs.append((header, seq))
-        filein.close()
-    return run_locarnap(seqs, 30, cpus, foldless)
-
-
-def run_locarnap_for_infernal(currgroup, clusters, otus, basefolder):
+def run_fold_for_infernal(currgroup, groupfasta, basefolder, minseqs=1):
     '''Function for multithreading
-    creates the final locarna-p alignment and writes to files, then r2r struct'''
-    #run locana-p on the superclusters to get the alignment and consensus structure
-    #skip if already run and program just crashsed or whatever
-    currotufolder = basefolder + "group_" + str(currgroup)
-    if exists(currotufolder):
-        return ""
-    seqs = []
-    out = "group " + str(currgroup) + ": "
-    for cluster in clusters:
-        out += cluster + " "
+    creates the final BayesFold alignment and writes to files, then r2r struct'''
+    try:
+        #run locana-p on the superclusters to get the alignment and consensus structure
+        #skip if already run and program just crashsed or whatever
+        currotufolder = basefolder + "group_" + str(currgroup)
+        if exists(currotufolder):
+            return ""
+        seqs = []
         count = 0
-        for header, seq in MinimalFastaParser(open(otus[cluster], 'rU')):
-            seqs.append((header.split()[0], seq))
+        out = "group " + str(currgroup) + ": "
+        for header, seq in MinimalFastaParser(open(groupfasta, 'rU')):
+            seqs.append((header.split()[0] + "_" + header.split("_")[1], seq))
             count += int(header.split("_")[1])
-    out += "\n" + str(count) + " sequences\n"
-    #make sure group has enough sequences before continuing
-    #run locarna-p on the at most 50 most abundant sequences in the group
-    aln, struct = run_locarnap(seqs, 50, cpus=2, foldless=True)
-
-    #create output folder for group
-    mkdir(currotufolder)
-    if(aln.getNumSeqs() < 50):
-        out += str(aln.getNumSeqs()) + " unique sequences\n"
-        fout = open(currotufolder + "/unique.fasta", 'w')
-        fout.write(aln.toFasta())
-        fout.close()
-    else:
-        s, h = remove_duplicates(seqs)
-        out += str(len(s)) + " unique sequences\n"
-        write_fasta_list(s, currotufolder + "/unique.fasta")
-    out += "Structure: " + struct + "\n"
-
-    #write out alignment and structure in fasta and stockholm formats
-    #write that shit
-    logout = open(currotufolder + "/log.txt", 'w')
-    logout.write(out)
-    logout.close()
-    alnout = open(currotufolder + "/locarnap-aln.fasta", 'w')
-    alnout.write(aln.toFasta() + "\n>SS_struct\n" + struct + "\n")
-    alnout.close()
-    alnout = open(currotufolder + "/locarnap-aln.sto", 'w')
-    struct_dict = {'SS_cons': struct}
-    alnout.write(stockholm_from_alignment(aln, GC_annotation=struct_dict))
-    alnout.close()
-    #make R2R secondary structure for alignment
-    make_r2r(currotufolder + "/locarnap-aln.sto", currotufolder, "group_" + str(currgroup))
+        out += "\n" + str(count) + " sequences\n"
+        if count < minseqs:
+            print currgroup + " has less than " + str(minseqs) + " sequences, skipping"
+            return ""
+        #make sure group has enough sequences before continuing
+        #run BayesFold on the at most 50 most abundant sequences in the group
+        aln, struct = bayesfold(seqs)
+        #create output folder for group
+        mkdir(currotufolder)
+        if(aln.getNumSeqs() < 50):
+            out += str(aln.getNumSeqs()) + " unique sequences\n"
+            fout = open(currotufolder + "/unique.fasta", 'w')
+            fout.write(aln.toFasta())
+            fout.close()
+        else:
+            s, h = remove_duplicates(seqs)
+            out += str(len(s)) + " unique sequences\n"
+            write_fasta_list(s, currotufolder + "/unique.fasta")
+        out += "Structure: " + struct + "\n"
+        #write out alignment and structure in fasta and stockholm formats
+        #write that shit
+        logout = open(currotufolder + "/log.txt", 'w')
+        logout.write(out)
+        logout.close()
+        alnout = open(currotufolder + "/bayesfold-aln.fasta", 'w')
+        alnout.write(aln.toFasta() + "\n>SS_struct\n" + struct + "\n")
+        alnout.close()
+        alnout = open(currotufolder + "/bayesfold-aln.sto", 'w')
+        struct_dict = {'SS_cons': struct}
+        alnout.write(stockholm_from_alignment(aln, GC_annotation=struct_dict))
+        alnout.close()
+        #make R2R secondary structure for alignment
+        make_r2r(currotufolder + "/bayesfold-aln.sto", currotufolder, "group_" + str(currgroup))
+    except Exception, e:
+        print str(e)
+        stdout.flush()
 
 
 def score_rnaforester(struct1, struct2):
@@ -204,7 +200,7 @@ def run_infernal(lock, cmfile, rnd, basefolder, outfolder, cpus=1, score=0.0, mp
             fout.write(hit[0] + "," + str(hit[14]) + "," + str(hit[15]) + "\n")
         fout.close()
         print "Round " + str(rnd) + ": " + str(len(result)) + " hits"
-        sys.stdout.flush()
+        stdout.flush()
         lock.acquire()
         fout = open(outfolder + "/log.txt", 'a')
         fout.write("Round " + str(rnd) + ": " + str(len(result)) + " hits\n")
@@ -219,39 +215,41 @@ def run_infernal(lock, cmfile, rnd, basefolder, outfolder, cpus=1, score=0.0, mp
 
 if __name__ == "__main__":
     starttime = time()
-    parser = argparse.ArgumentParser(description="Runs structural clustering \
+    parser = argparse.ArgumentParser(description="Runs sequence clustering \
     and infernal over all rounds of a SELEX selection")
-    parser.add_argument('-i', required=True, help="TXT file of clusters and the\
-    paths to their FASTA files")
+    parser.add_argument('-i', required=True, help="FASTA file of unique sequences sorted by abundance.")
     parser.add_argument('-f', required=True, help="Base folder holding FASTA files for all \
     unique sequences in the rounds of selection (for infernal)")
     parser.add_argument('-o', required=True, help="Base folder to output all data to")
     parser.add_argument('-r', required=True, type=int, help="Current round of selection\
     clusters come from")
-    parser.add_argument('--rsc', type=float, default=0.5, help="Relative score cutoff for rnaforester \
+    parser.add_argument('--sim', required=True, type=float, default=0.97, help="Simmilarity for uclust.\
+    (Default 0.97)")
+    parser.add_argument('--minseqs', type=int, default=100, help="Minimum number of sequences for \
+    groups to be significant (Default 100)")
+    parser.add_argument('--rsc', type=float, default=0.5, help="Score cutoff for rnaforester \
     (Default 0.5)")
-    parser.add_argument('--isc', type=float, default=0.0, help="Score cutoff for infernal.\
+    parser.add_argument('--isc', type=int, default=0.0, help="Score cutoff for infernal.\
     (Default 0.0)")
     parser.add_argument('-c', type=int, default=1, help="Number of CPUs to use \
     (Default 1)")
-    parser.add_argument('--inf', action="store_true", default=False, help="Skip straight to infernal \
-    (Default False)")
-    parser.add_argument('--mpi', action="store_true", default=False, help="Run infernal in MPI mode \
-    (Default False)")
 
     args = parser.parse_args()
     if args.r < 1:
         print "ERROR: round must be at least 1!"
-        sys.exit(1)
+        exit(1)
     if args.c < 1:
         print "ERROR: CPU count must be at least 1!"
-        sys.exit(1)
+        exit(1)
     if args.isc < 0:
         print "ERROR: Infernal score cutoff must be greater than 0!"
-        sys.exit(1)
-    if args.rsc < 0 or args.rsc > 1:
-        print "ERROR: RNAforester score cutoff must be between 0 and 1!"
-        sys.exit(1)
+        exit(1)
+    if args.sim < 0.0 or args.sim > 1.0:
+        print "ERROR: Infernal score cutoff must be greater than 0!"
+        exit(1)
+    compscore = False
+    if args.rsc == -10000:
+        compscore = True
 
     foresterscore = args.rsc
     infernalscore = args.isc
@@ -264,59 +262,87 @@ if __name__ == "__main__":
         otufolder += "/"
     if not exists(otufolder):
         mkdir(otufolder)
-
-    #Get list of clusters from file, populate dictionary
-    #path to cluster's fasta keyed to cluster name
-    print "Program started ", datetime.now()
-    otus = {}
-    fn = open(args.i, 'rU')
-    for line in fn:
-        lineinfo = line.split()
-        if not exists(lineinfo[1].strip()):
-            print lineinfo[0] + ": OTU FASTA file missing!"
-            exit(1)
-        otus[lineinfo[0]] = lineinfo[1].strip()
-    fn.close()
-    known = {}
-    if exists(otufolder + "cluster_structs.fasta"):
-            #read in known structures
-            csf = open(otufolder + "cluster_structs.fasta")
-            for header, struct in MinimalFastaParser(csf):
-                known[header] = struct
-            csf.close()
+    print "==Clustering sequences by primary sequence=="
+    clusters = {}
+    secs = time()
+    if exists(otufolder + "clusters.txt"):
+        print "sequences previously clustered"
+        clustersin = open(otufolder + "clusters.txt")
+        currclust = ""
+        for header, seq in MinimalFastaParser(clustersin):
+            if "cluster_" in header:
+                currclust = header
+                clusters[currclust] = []
+            else:
+                clusters[currclust].append((header,seq))
     else:
+        print "Running uclust over sequences"
+        #cluster the initial sequences by sequence simmilarity
+        clusters = cluster_seqs(args.i, args.sim, folderout=args.o, gapopen='10.0/*TI', gapext='10.0')
+
+        #remove tiny clusters
+        #topop = []
+        #countarray = []
+        #for cluster in clusters:
+        #    totalseqs = 0
+        #    for seq in clusters[cluster]:
+        #        totalseqs += int(seq[0].split("_")[1])
+        #    if totalseqs < args.minseqs:
+        #        topop.append(cluster)
+        #    else:
+        #        countarray.append((cluster,totalseqs))
+        #for remove in topop:
+        #    clusters.pop(remove)
+
+        #print that shit to file
+        cout = open(otufolder + "clusters.txt", 'w')
+        for cluster in clusters:
+            cout.write(">%s\n%s\n" % (cluster, cluster))
+            for seq in clusters[cluster]:
+                cout.write(">%s\n%s\n" % seq)
+        cout.close()
+        print str(len(clusters)) + " clusters"
+        print "Runtime: " + str((time() - secs)/60) + " min"
+
+    if not exists(otufolder + "cluster_structs.fasta"):
         #create file to write to if not already there
         cfo = open(otufolder + "cluster_structs.fasta", 'w')
         cfo.close()
-    print "==Clustering sequences by structure=="
-    print "Running locarna-p over " + str(len(otus)) + " clusters"
-    secs = time()
 
-    #make a pool of workers, one for each cpu available
-    manager = Manager()
-    pool = Pool(processes=args.c)
-    lock = manager.Lock()
-    #run the pool over all clusters to get file of structures
-    for otu in otus:
-        pool.apply_async(func=fold_clusters, args=(lock, known, otu, otufolder))
-    pool.close()
-    pool.join()
+        print "Running BayesFold over "+ str(len(clusters)) +" clusters"
+        secs = time()
+        #make a pool of workers, one for each cpu available
+        manager = Manager()
+        pool = Pool(processes=args.c)
+        lock = manager.Lock()
+        #run the pool over all clusters to get file of structures
+        for cluster in clusters:
+            pool.apply_async(func=fold_clusters, args=(lock, cluster, clusters[cluster], otufolder))
+        pool.close()
+        pool.join()
+
     #read in all structures now that they are folded
     structgroups = {}
+    count = 0
     cfo = open(otufolder + "cluster_structs.fasta", 'rU')
-    nostructout = open(otufolder + "unstructured_clusters.txt", 'w')
+    nostruct = []
     for cluster, struct in MinimalFastaParser(cfo):
-        #remove unstructured groups and print to file for examination
-        if "(" not in struct:
-            print cluster + ": NO STRUCTURE PREDICTED"
-            nostructout.write(cluster + "\t" + struct + "\n")
+        count += 1
+        #remove unstructured groups
+        if struct.count("(") < 5:
+            nostruct.append(cluster)
             continue
+        #create dictionary of sequences now keyed to structures
         if struct in structgroups:
-            structgroups[struct].append(cluster)
+            structgroups[struct].extend(clusters[cluster])
         else:
-            structgroups[struct] = [cluster]
+            structgroups[struct] = clusters[cluster]
     cfo.close()
-    nostructout.close()
+
+    if count != len(clusters):
+        raise AssertionError(str(count) + " structures, " + str(len(clusters)) + " clusters. Not all clusters folded!")
+
+
     print "Runtime: " + str((time() - secs)/60) + " min"
     print "==Grouping clusters by secondary structure=="
     #GROUP THE SECONDARY STRUCTURES BY RNAFORESTER
@@ -324,50 +350,36 @@ if __name__ == "__main__":
     #for comparison. That way when list empty, all are grouped
     secs = time()
     skipiter = False
-    #if groups already exist, read them in
-    if exists(otufolder + "groups.txt"):
-        structgroups = {}
-        gin = open(otufolder + "groups.txt", 'rU')
-        foresterscore = float(gin.readline().strip())
-        for line in gin:
-            if line.strip() == "FINAL":
-                skipiter = True
-            else:
-                lineinfo = line.split(':')
-                structgroups[lineinfo[0]] = lineinfo[1].strip().split()
-        gin.close()
+    if exists(otufolder + "fasta_groups/"):
+        skipiter = True
+
     print "RNAforester score threshold: " + str(foresterscore)
     #Now need to iteratively refine the groups down
     #check to make sure we need to first
-    if not args.inf and not skipiter:
+    if not skipiter:
         startcount = 1
         endcount = 0
-        iteration = 0
+        iteration = 1
         secs = time()
-        print "iteration " + str(iteration) + ": " + str(len(structgroups)) + " initial groups"
+        #wipe out clusters dict to save memory
+        clusters = 0              
+
+        print "start: " + str(len(structgroups)) + " initial groups"
         #initial clustering by structures generated in first folding
         structgroups = group_by_forester(structgroups, foresterscore)
-        gout = open(otufolder + "groups.txt", 'w')
-        gout.write(str(foresterscore) + "\n")
-        for group in structgroups:
-            gout.write(group + ":")
-            for g in structgroups[group]:
-                gout.write(g+" ")
-            gout.write("\n")
-        gout.close()
-        iteration += 1
 
         while startcount != endcount:  # keep refining while we are still grouping structs
             startcount = len(structgroups)
             print "iteration " + str(iteration) + ": " + str(len(structgroups)) + " initial groups"
             #Refold all the groups to get new consensus secondary structure
+
             #make a pool of workers, one for each cpu available
             manager = Manager()
             hold = manager.dict()
             pool = Pool(processes=args.c)
             #run the pool over all groups to get structures for new groups
             for struct in structgroups:
-                pool.apply_async(func=fold_groups, args=(otus, structgroups[struct], struct, hold))
+                pool.apply_async(func=fold_groups, args=(structgroups[struct], struct, hold, 30))
             pool.close()
             pool.join()
 
@@ -375,41 +387,37 @@ if __name__ == "__main__":
             structgroups = {}
             for key in hold.keys():
                 structgroups[key] = hold[key]
-
+            
+            #group remaining structures using rnaforester
             structgroups = group_by_forester(structgroups, foresterscore)
+
             endcount = len(structgroups)
-            #write out file with groups
-            gout = open(otufolder + "groups.txt", 'w')
-            gout.write(str(foresterscore) + "\n")
-            for group in structgroups:
-                gout.write(group + ":")
-                for g in structgroups[group]:
-                    gout.write(g+" ")
-                gout.write("\n")
-            gout.close()
             iteration += 1
         #end while
-
+        #sort all structure sequences by count
+            for struct in structgroups:
+                structgroups[struct].sort(reverse=True, key=lambda count: int(count[0].split('_')[1]))
         print str(len(structgroups)) + " final groups (" + str((time() - secs) / 60) + "m)"
-        gout = open(otufolder + "groups.txt", 'a')
-        gout.write("FINAL\n")
-        gout.close()
+        #sort all structure sequences by count
+        for struct in structgroups:
+            structgroups[struct].sort(reverse=True, key=lambda count: int(count[0].split('_')[1]))
+        #write out fasta files for groups: header of each sequence in the group
+        mkdir(otufolder+"fasta_groups")
+        for num,group in enumerate(structgroups):
+            gout = open(otufolder+"fasta_groups/group_" + str(num) + ".fasta", 'w')
+            for g in structgroups[group]:
+                gout.write(">%s\n%s\n" % g)
+            gout.close()
     else:
         print str(len(structgroups)) + " final groups"
 
     print "==Creating CM and r2r structures=="
-    #make sure we read in the same group order every time by reading file
-    gin = open(otufolder + "groups.txt", 'U')
-    groups = gin.readlines()
-    gin.close()
-    #split each line so you only keep the cluster names as a list
-    structgroups = [group.split(":")[1].split() for group in groups[1:-1]]
-
     secs = time()
     pool = Pool(processes=int(ceil(args.c/2)))
-    #run the pool over all clusters to get file of structures
-    for group, currgroup in enumerate(structgroups):
-        pool.apply_async(func=run_locarnap_for_infernal, args=(group+1, currgroup, otus, otufolder))
+    #run the pool over all groups to get structures
+    for group in walk(otufolder + "fasta_groups").next()[2]:
+        groupnum = group.split("_")[-1].split(".")[0]
+        pool.apply_async(func=run_fold_for_infernal, args=(groupnum, otufolder+"fasta_groups/" + group, otufolder, args.minseqs))
     pool.close()
     pool.join()
     print "Runtime: " + str((time() - secs) / 60) + "m"
@@ -423,6 +431,8 @@ if __name__ == "__main__":
     ihits.write("\n")
     #loop over each group and run infernal on it for all rounds
     for group in walk(otufolder).next()[1]:
+        if group == "fasta_groups":
+            continue
         secs = time()
         print "GROUP: " + group
         logfile = open(otufolder + group + "/log.txt")
@@ -434,11 +444,11 @@ if __name__ == "__main__":
         if exists(otufolder + group + "/R1hits.txt"):
             skip = True
         #only run infernal if there were more than 100 total sequences in group
-        if seqs > 99 and not skip:
+        if not skip:
             currotufolder = otufolder + group
             #create the cm file and calibrate it
             cmfile = open(currotufolder + "/infernal_" + group + ".cm", 'w')
-            cmfile.write(cmbuild_from_file(currotufolder + "/locarnap-aln.sto"))
+            cmfile.write(cmbuild_from_file(currotufolder + "/bayesfold-aln.sto"))
             cmfile.close()
             cmfile = currotufolder + "/infernal_" + group + ".cm"
             calibrate_file(cmfile)
@@ -460,10 +470,10 @@ if __name__ == "__main__":
                 #run cmsearch over every round of SELEX
                 #if there is extra cpu power, apply it!
                 if extracpus > 0:
-                    pool.apply_async(func=run_infernal, args=(lock, cmfile, i, args.f, currotufolder, procs+1, infernalscore, args.mpi))
+                    pool.apply_async(func=run_infernal, args=(lock, cmfile, i, args.f, currotufolder, procs+1, infernalscore))
                     extracpus -= 1
                 else:
-                    pool.apply_async(func=run_infernal, args=(lock, cmfile, i, args.f, currotufolder, procs, infernalscore, args.mpi))
+                    pool.apply_async(func=run_infernal, args=(lock, cmfile, i, args.f, currotufolder, procs, infernalscore))
             pool.close()
             pool.join()
             logfile = open(otufolder + group + "/log.txt")
@@ -476,7 +486,7 @@ if __name__ == "__main__":
                 hitscsv.write(r.split()[2] + ",")
             hitscsv.write("\n")
             print "Runtime: " + str((time() - secs) / 60) + "m\n"
-        elif skip:
+        else:
             print "Group already run"
             logfile = open(otufolder + group + "/log.txt")
             roundhits = logfile.readlines()[4:]
@@ -487,7 +497,4 @@ if __name__ == "__main__":
             for r in roundhits:
                 hitscsv.write(r.split()[2] + ",")
             hitscsv.write("\n")
-        #skip group if less than 100 sequences
-        else:
-            print "Group has less than 100 sequences, skipping infernal run"
 print "Program ended ", datetime.now(), "   Runtime: " + str((time() - starttime)/3600) + "h"

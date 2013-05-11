@@ -49,12 +49,17 @@ if __name__ == "__main__":
     parser.add_argument('-o', default = "", help="Output folder (default same as input)")
     parser.add_argument('-l', default = 1, type=int, help="minimum length of \
     sequence to keep (default 1)")
+    parser.add_argument('-d', default = 2, type=int, help="minimum number of duplicates\
+    needed to keep (default 2)")
     parser.add_argument('-q', action='store_true', default = False, help="Input is fastq format \
     (default fasta)")
 
     args = parser.parse_args()
     if args.l < 1:
         print "ERROR: min sequence length must be greater than 1!"
+        exit(1)
+    if args.d < 1:
+        print "ERROR: min number of duplicates must be greater than 1!"
         exit(1)
 
     #add trailing slash if necessary to folderin
@@ -101,7 +106,7 @@ if __name__ == "__main__":
 
         log = open(currfolder + "-cleanup.log", 'w')
         log.write("====================\nFile in: " + folderin + filein + "\nOutput Folder: " + currfolder + \
-        "\n3' primer: " + args.p + "\nMin length: " + str(args.l) + "\n====================\n")
+        "\n3' primer: " + args.p + "\nMin length: " + str(args.l) + "\nMin duplicates: " + str(args.d) + "\n====================\n")
         #strip primers from sequences, print out not stripped to be safe
         #allowing up to 2 mismatches in the primer
         print "Primer stripping"
@@ -126,6 +131,10 @@ if __name__ == "__main__":
         print "Remove duplicates"
         secs = time()
         kept, headers = remove_duplicates(kept)
+        #parse out only sequences with enough duplicates
+        if args.d > 1:
+            newkept = [seq for seq in kept if int(seq[0].split("_")[1]) >= args.d]
+            kept = newkept
         write_fasta_list(kept, currfolder + "-Unique.fasta")
         #write out file holding headers keyed to a sequence
         keyfile = open(currfolder + "-seqtoheaders.txt", 'w')

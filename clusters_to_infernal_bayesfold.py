@@ -2,21 +2,19 @@
 from sys import stdout
 from os.path import exists
 from os import mkdir, walk
-from clean_seqs import write_fasta_list
 from cogent import LoadSeqs, RNA
 from cogent.app.infernal_v11 import cmsearch_from_file, cmbuild_from_file, calibrate_file
 from cogent.parse.fasta import MinimalFastaParser
 from cogent.format.stockholm import stockholm_from_alignment
-from remove_duplicates import remove_duplicates
 from subprocess import Popen, PIPE
 from time import time
 from datetime import datetime
 from multiprocessing import Pool, Manager
 import argparse
 from math import floor, ceil
-from cluster_seqs import cluster_seqs
 from alignment import RNAAlignment, RNAStructureAlignment
 from cogent.app.muscle_v38 import align_unaligned_seqs
+from utils import cluster_seqs, remove_duplicates, write_fasta_list
 
 
 def fold_clusters(lock, cluster, seqs, otufolder):

@@ -10,21 +10,7 @@ from remove_duplicates import remove_duplicates
 from tempfile import mktemp
 from time import time
 import argparse
-
-
-def write_fasta_list(lst, filename):
-    '''writes MinimalFastaParser formatted list [(header,sequence)] to fasta file filename'''
-    fileout = open(filename, 'w')
-    for seq in lst:
-        fileout.write('>%s\n%s\n' % (seq[0], seq[1]))
-    fileout.close()
-
-def write_fasta_dict(dct, filename):
-    '''writes MinimalFastaParser formatted dict {header: sequence} to fasta file filename'''
-    fileout = open(filename, 'w')
-    for header, seq in dct:
-        fileout.write('>%s\n%s\n' % (header, seq))
-    fileout.close()
+from utils import write_fasta_list, write_fasta_dict
 
 
 def rem_N_short(seqs, minlen=1):

@@ -14,7 +14,7 @@ import argparse
 from math import floor, ceil
 from alignment import RNAAlignment, RNAStructureAlignment
 from cogent.app.muscle_v38 import align_unaligned_seqs
-from stutils import cluster_seqs, remove_duplicates, write_fasta_list
+from stutils import cluster_seqs, remove_duplicates, write_fasta_list, get_shape
 
 
 def fold_clusters(lock, cluster, seqs, otufolder):
@@ -41,6 +41,24 @@ def fold_clusters(lock, cluster, seqs, otufolder):
         lock.release()
     finally:
         lock.release()
+
+
+def group_by_shape(structs):
+    fams = {}
+    for struct in structs:
+        famed = False
+        #convert to shape
+        gshape = get_shape(struct)
+        for secshape in fams:
+            #loop over all previously found shapes, see if it fits
+            if gshape == secshape:
+                fams[gshape].append(struct)
+                famed = True
+                break
+        #if not fitted, create new group for this shape
+        if not famed:
+            fams[gshape] = [struct]
+    return fams
 
 
 def fold_groups(seqs, struct, hold, numkept=None):
@@ -99,15 +117,10 @@ def run_fold_for_infernal(currgroup, groupfasta, basefolder, minseqs=1):
         aln, struct = bayesfold(seqs)
         #create output folder for group
         mkdir(currotufolder)
-        if(aln.getNumSeqs() < 50):
-            out += str(aln.getNumSeqs()) + " unique sequences\n"
-            fout = open(currotufolder + "/unique.fasta", 'w')
-            fout.write(aln.toFasta())
-            fout.close()
-        else:
-            s, h = remove_duplicates(seqs)
-            out += str(len(s)) + " unique sequences\n"
-            write_fasta_list(s, currotufolder + "/unique.fasta")
+        out += str(aln.getNumSeqs()) + " unique sequences\n"
+        fout = open(currotufolder + "/unique.fasta", 'w')
+        fout.write(aln.toFasta())
+        fout.close()
         out += "Structure: " + struct + "\n"
         #write out alignment and structure in fasta and stockholm formats
         #write that shit
@@ -157,6 +170,10 @@ def group_by_forester(structgroups, foresterscore):
         structgroups.pop(key)
     return structgroups
 
+def group_by_forester_multi(structgroups, foresterscore, hold):
+    groups = group_by_forester(structgroups, foresterscore)
+    hold.update(groups)
+
 
 def make_r2r(insto, outfolder, group):
     '''generates R2R secondary structure pdf with default colorings'''
@@ -197,7 +214,6 @@ def run_infernal(lock, cmfile, rnd, basefolder, outfolder, cpus=1, score=0.0, mp
         for hit in result:
             fout.write(hit[0] + "," + str(hit[14]) + "," + str(hit[15]) + "\n")
         fout.close()
-        print "Round " + str(rnd) + ": " + str(len(result)) + " hits"
         stdout.flush()
         lock.acquire()
         fout = open(outfolder + "/log.txt", 'a')
@@ -294,7 +310,9 @@ if __name__ == "__main__":
 
         #print that shit to file
         cout = open(otufolder + "clusters.txt", 'w')
-        for cluster in clusters:
+        hold = clusters.keys()
+        hold.sort()
+        for cluster in hold:
             cout.write(">%s\n%s\n" % (cluster, cluster))
             for seq in clusters[cluster]:
                 cout.write(">%s\n%s\n" % seq)
@@ -351,6 +369,10 @@ if __name__ == "__main__":
     if exists(otufolder + "fasta_groups/"):
         skipiter = True
 
+    print "Abstract shape assignment"
+    groups_shape = group_by_shape(structgroups.keys())
+    print len(groups_shape), "shape groups"
+
     print "RNAforester score threshold: " + str(foresterscore)
     #Now need to iteratively refine the groups down
     #check to make sure we need to first
@@ -363,8 +385,27 @@ if __name__ == "__main__":
         clusters = 0              
 
         print "start: " + str(len(structgroups)) + " initial groups"
-        #initial clustering by structures generated in first folding
-        structgroups = group_by_forester(structgroups, foresterscore)
+        #initial clustering by structures generated in first folding, broken out by shapes
+        #make a pool of workers, one for each cpu available
+        manager = Manager()
+        hold = manager.dict()
+        pool = Pool(processes=args.c)
+        #run the pool over all groups to get structures for new groups
+        for shapegroup in groups_shape:
+            groupinfo = {}
+            for struct in groups_shape[shapegroup]:
+                groupinfo[struct] = structgroups[struct]
+            pool.apply_async(func=group_by_forester_multi, args=(groupinfo, foresterscore, hold))
+        pool.close()
+        pool.join()
+
+        #wipe out groups_shape dictionary to save memory
+        groups_shape = 0
+        #need to turn manager dict to regular dict
+        structgroups = {}
+        for key in hold.keys():
+            structgroups[key] = hold[key]
+            
 
         while startcount != endcount:  # keep refining while we are still grouping structs
             startcount = len(structgroups)
@@ -396,9 +437,7 @@ if __name__ == "__main__":
             for struct in structgroups:
                 structgroups[struct].sort(reverse=True, key=lambda count: int(count[0].split('_')[1]))
         print str(len(structgroups)) + " final groups (" + str((time() - secs) / 60) + "m)"
-        #sort all structure sequences by count
-        for struct in structgroups:
-            structgroups[struct].sort(reverse=True, key=lambda count: int(count[0].split('_')[1]))
+        
         #write out fasta files for groups: header of each sequence in the group
         mkdir(otufolder+"fasta_groups")
         for num,group in enumerate(structgroups):
@@ -419,6 +458,18 @@ if __name__ == "__main__":
     pool.close()
     pool.join()
     print "Runtime: " + str((time() - secs) / 60) + "m"
+
+    #write out group counts file
+    groupsizefile = open(currotufolder + "/group_sizes.txt", 'w')
+    groupsizefile.write("Group\tTotal Seqs\tUnique Seqs\n")
+    for group in walk(otufolder).next()[1]:
+        log = open(currotufolder + "/log.txt")
+        loginfo = log.readlines()
+        log.close()
+        groupsizefile.write(''.join([group, "\t", loginfo[1].split()[0], "\t", loginfo[2].split()[0], "\n"]))
+    groupsizefile.close()
+
+
     print "==Running Infernal for all groups=="
     print "Infernal score cutoff: " + str(infernalscore)
     #create the csv file for holding all the hit counts
@@ -432,11 +483,9 @@ if __name__ == "__main__":
         if group == "fasta_groups":
             continue
         secs = time()
-        print "GROUP: " + group
         logfile = open(otufolder + group + "/log.txt")
         log = logfile.readlines()
         logfile.close()
-        print ''.join(log).strip()
         seqs = int(log[1].split()[0])
         skip = False
         if exists(otufolder + group + "/R1hits.txt"):
@@ -483,9 +532,9 @@ if __name__ == "__main__":
             for r in roundhits:
                 hitscsv.write(r.split()[2] + ",")
             hitscsv.write("\n")
-            print "Runtime: " + str((time() - secs) / 60) + "m\n"
+            print group + "\tRuntime: " + str((time() - secs) / 60) + "m"
         else:
-            print "Group already run"
+            print group + "\talready run"
             logfile = open(otufolder + group + "/log.txt")
             roundhits = logfile.readlines()[4:]
             logfile.close()

@@ -1,7 +1,5 @@
 from sys import argv
 from os import walk
-from os.path import exists
-from os import walk
 from numpy import zeros
 
 #overlap_check.py basefolder #round
@@ -24,7 +22,7 @@ if __name__ == "__main__":
     sizegroups = len(groups)
     groups.sort()
     #get total number fo groups in the round, add 1 for looping
-    print str(sizegroups-1) + " groups"
+    print str(sizegroups) + " groups"
     #compare all group sequences to other sequences
     countmatrix = zeros(shape=(sizegroups, sizegroups), dtype=float)
     for group, gfile in enumerate(groups):

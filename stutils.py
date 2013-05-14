@@ -6,6 +6,7 @@ from cogent.app.uclust import Uclust, clusters_from_uc_file
 from cogent.parse.fasta import MinimalFastaParser
 from sys import argv
 from os.path import exists
+from subprocess import Popen, PIPE
 from qiime.split_libraries import local_align_primer_seq
 
 
@@ -118,3 +119,9 @@ def remove_duplicates(seqsin):
     #sort by sequence count, highest to lowest
     uniquesret.sort(reverse=True, key=lambda item: int(item[0].split("_")[1]))
     return uniquesret, repseqs
+
+
+def get_shape(struct):
+    '''Converts a dot-bracket notation to abstract shape notation'''
+    p = Popen(["rnashapes", "-D", struct], stdout=PIPE)
+    return p.communicate()[0].strip()

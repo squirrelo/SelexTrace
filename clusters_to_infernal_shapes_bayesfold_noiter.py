@@ -364,10 +364,6 @@ if __name__ == "__main__":
         print "RNAforester score threshold: " + str(foresterscore)
         #Now need to iteratively refine the groups down
         #check to make sure we need to first
-
-        startcount = 1
-        endcount = 0
-        iteration = 1
         secs = time()
         #wipe out clusters dict to save memory
         clusters = 0              
@@ -394,37 +390,29 @@ if __name__ == "__main__":
         for key in hold.keys():
             structgroups[key] = hold[key]
             
+        #Refold all the groups to get new consensus secondary structure
+        #make a pool of workers, one for each cpu available
+        manager = Manager()
+        hold = manager.dict()
+        pool = Pool(processes=args.c)
+        #run the pool over all groups to get structures for new groups
+        for struct in structgroups:
+            pool.apply_async(func=fold_groups, args=(structgroups[struct], struct, hold, 30))
+        pool.close()
+        pool.join()
 
-        while startcount != endcount:  # keep refining while we are still grouping structs
-            startcount = len(structgroups)
-            print "iteration " + str(iteration) + ": " + str(len(structgroups)) + " initial groups"
-            #Refold all the groups to get new consensus secondary structure
+        #need to turn manager dict to regular dict
+        structgroups = {}
+        for key in hold.keys():
+            structgroups[key] = hold[key]
+        
+        #group remaining structures using rnaforester
+        structgroups = group_by_forester(structgroups, foresterscore)
 
-            #make a pool of workers, one for each cpu available
-            manager = Manager()
-            hold = manager.dict()
-            pool = Pool(processes=args.c)
-            #run the pool over all groups to get structures for new groups
-            for struct in structgroups:
-                pool.apply_async(func=fold_groups, args=(structgroups[struct], struct, hold, 30))
-            pool.close()
-            pool.join()
-
-            #need to turn manager dict to regular dict
-            structgroups = {}
-            for key in hold.keys():
-                structgroups[key] = hold[key]
-            
-            #group remaining structures using rnaforester
-            structgroups = group_by_forester(structgroups, foresterscore)
-
-            endcount = len(structgroups)
-            iteration += 1
-        #end while
         #sort all structure sequences by count
-            for struct in structgroups:
-                structgroups[struct].sort(reverse=True, key=lambda count: int(count[0].split('_')[1]))
-        print str(len(structgroups)) + " final groups (" + str((time() - secs) / 60) + "m)"
+        for struct in structgroups:
+            structgroups[struct].sort(reverse=True, key=lambda count: int(count[0].split('_')[1]))
+        print str(len(structgroups)) + " final groups (" + str((time() - secs) / 3600) + "h)"
 
         #write out fasta files for groups: header of each sequence in the group
         mkdir(otufolder+"fasta_groups")

@@ -477,10 +477,6 @@ if __name__ == "__main__":
         if group == "fasta_groups":
             continue
         secs = time()
-        logfile = open(otufolder + group + "/log.txt")
-        log = logfile.readlines()
-        logfile.close()
-        seqs = int(log[1].split()[0])
         skip = False
         if exists(otufolder + group + "/R1hits.txt"):
             skip = True

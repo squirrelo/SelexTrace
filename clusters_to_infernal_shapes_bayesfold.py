@@ -12,7 +12,7 @@ from datetime import datetime
 from multiprocessing import Pool, Manager
 import argparse
 from math import floor, ceil
-from alignment import RNAAlignment, RNAStructureAlignment
+from alignment import RNAAlignment, RNAStructureAlignment  #bayesfold folding
 from cogent.app.muscle_v38 import align_unaligned_seqs
 from stutils import cluster_seqs, remove_duplicates, write_fasta_list, get_shape
 
@@ -110,7 +110,6 @@ def run_fold_for_infernal(currgroup, groupfasta, basefolder, minseqs=1):
             count += int(header.split("_")[1])
         out += "\n" + str(count) + " sequences\n"
         if count < minseqs:
-            print currgroup + " has less than " + str(minseqs) + " sequences, skipping"
             return ""
         #make sure group has enough sequences before continuing
         #run BayesFold on the at most 50 most abundant sequences in the group
@@ -294,20 +293,6 @@ if __name__ == "__main__":
         #cluster the initial sequences by sequence simmilarity
         clusters = cluster_seqs(args.i, args.sim, folderout=args.o, gapopen='10.0/*TI', gapext='10.0')
 
-        #remove tiny clusters
-        #topop = []
-        #countarray = []
-        #for cluster in clusters:
-        #    totalseqs = 0
-        #    for seq in clusters[cluster]:
-        #        totalseqs += int(seq[0].split("_")[1])
-        #    if totalseqs < args.minseqs:
-        #        topop.append(cluster)
-        #    else:
-        #        countarray.append((cluster,totalseqs))
-        #for remove in topop:
-        #    clusters.pop(remove)
-
         #print that shit to file
         cout = open(otufolder + "clusters.txt", 'w')
         hold = clusters.keys()
@@ -369,14 +354,16 @@ if __name__ == "__main__":
     if exists(otufolder + "fasta_groups/"):
         skipiter = True
 
-    print "Abstract shape assignment"
-    groups_shape = group_by_shape(structgroups.keys())
-    print len(groups_shape), "shape groups"
-
-    print "RNAforester score threshold: " + str(foresterscore)
-    #Now need to iteratively refine the groups down
-    #check to make sure we need to first
     if not skipiter:
+
+        print "Abstract shape assignment"
+        groups_shape = group_by_shape(structgroups.keys())
+        print len(groups_shape), "shape groups"
+
+        print "RNAforester score threshold: " + str(foresterscore)
+        #Now need to iteratively refine the groups down
+        #check to make sure we need to first
+
         startcount = 1
         endcount = 0
         iteration = 1
@@ -437,7 +424,7 @@ if __name__ == "__main__":
             for struct in structgroups:
                 structgroups[struct].sort(reverse=True, key=lambda count: int(count[0].split('_')[1]))
         print str(len(structgroups)) + " final groups (" + str((time() - secs) / 60) + "m)"
-        
+
         #write out fasta files for groups: header of each sequence in the group
         mkdir(otufolder+"fasta_groups")
         for num,group in enumerate(structgroups):
@@ -446,7 +433,7 @@ if __name__ == "__main__":
                 gout.write(">%s\n%s\n" % g)
             gout.close()
     else:
-        print str(len(structgroups)) + " final groups"
+        print str(len(structgroups)) + " groups"
 
     print "==Creating CM and r2r structures=="
     secs = time()
@@ -457,18 +444,23 @@ if __name__ == "__main__":
         pool.apply_async(func=run_fold_for_infernal, args=(groupnum, otufolder+"fasta_groups/" + group, otufolder, args.minseqs))
     pool.close()
     pool.join()
-    print "Runtime: " + str((time() - secs) / 60) + "m"
+    print "Runtime: " + str((time() - secs) / 3600) + "h"
 
     #write out group counts file
-    groupsizefile = open(currotufolder + "/group_sizes.txt", 'w')
+    count = 0
+    groupsizefile = open(otufolder + "/group_sizes.txt", 'w')
     groupsizefile.write("Group\tTotal Seqs\tUnique Seqs\n")
     for group in walk(otufolder).next()[1]:
-        log = open(currotufolder + "/log.txt")
+        if group == "fasta_groups":
+            continue
+        count += 1
+        log = open(otufolder + group + "/log.txt")
         loginfo = log.readlines()
         log.close()
         groupsizefile.write(''.join([group, "\t", loginfo[1].split()[0], "\t", loginfo[2].split()[0], "\n"]))
     groupsizefile.close()
 
+    print count, "final groups"
 
     print "==Running Infernal for all groups=="
     print "Infernal score cutoff: " + str(infernalscore)

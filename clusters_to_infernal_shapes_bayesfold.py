@@ -170,6 +170,7 @@ def group_by_forester(structgroups, foresterscore):
     return structgroups
 
 def group_by_forester_multi(structgroups, foresterscore, hold):
+    '''Wrapper function for group_by_forester for multithreading'''
     groups = group_by_forester(structgroups, foresterscore)
     hold.update(groups)
 
@@ -298,7 +299,7 @@ if __name__ == "__main__":
         hold = clusters.keys()
         hold.sort()
         for cluster in hold:
-            cout.write(">%s\n%s\n" % (cluster, cluster))
+            cout.write(">%s\n%s\n" % (cluster, ''))
             for seq in clusters[cluster]:
                 cout.write(">%s\n%s\n" % seq)
         cout.close()
@@ -470,6 +471,7 @@ if __name__ == "__main__":
     for i in range(1, args.r+1):
         ihits.write("round" + str(i) + ",")
     ihits.write("\n")
+    ihits.close()
     #loop over each group and run infernal on it for all rounds
     for group in walk(otufolder).next()[1]:
         if group == "fasta_groups":

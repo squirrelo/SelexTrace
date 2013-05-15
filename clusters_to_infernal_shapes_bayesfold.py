@@ -447,10 +447,9 @@ if __name__ == "__main__":
     pool.join()
     print "Runtime: " + str((time() - secs) / 3600) + "h"
 
-    #write out group counts file
+    #get sequence counts for each group
+    infernalorder = []
     count = 0
-    groupsizefile = open(otufolder + "/group_sizes.txt", 'w')
-    groupsizefile.write("Group\tTotal Seqs\tUnique Seqs\n")
     for group in walk(otufolder).next()[1]:
         if group == "fasta_groups":
             continue
@@ -458,11 +457,16 @@ if __name__ == "__main__":
         log = open(otufolder + group + "/log.txt")
         loginfo = log.readlines()
         log.close()
-        groupsizefile.write(''.join([group, "\t", loginfo[1].split()[0], "\t", loginfo[2].split()[0], "\n"]))
+        infernalorder.append((group, int(loginfo[1].split()[0]), int(loginfo[2].split()[0])))
+    #write out file of seuquence counts
+    infernalorder.sort(reverse=True, key=lambda x: x[1])
+    groupsizefile = open(otufolder + "/group_sizes.txt", 'w')
+    groupsizefile.write("Group\tTotal Seqs\tUnique Seqs\n")
+    for info in infernalorder:
+        groupsizefile.write("%s\t%s\t%s\n" % info)
     groupsizefile.close()
 
     print count, "final groups"
-
     print "==Running Infernal for all groups=="
     print "Infernal score cutoff: " + str(infernalscore)
     #create the csv file for holding all the hit counts
@@ -473,7 +477,8 @@ if __name__ == "__main__":
     ihits.write("\n")
     ihits.close()
     #loop over each group and run infernal on it for all rounds
-    for group in walk(otufolder).next()[1]:
+    for groupinfo in infernalorder:
+        group = groupinfo[0]
         if group == "fasta_groups":
             continue
         secs = time()

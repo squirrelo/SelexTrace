@@ -6,10 +6,19 @@ Code used to trace the rise of sequences and structures in a SELEX experiment. A
 REQUIREMENTS
 ==========
 Python 2.7
+
 Numpy 1.6
+
 Cogent 1.5.3
+
 Qiime 1.5
+
 uclust 2.2
+
 infernal 1.1r2
+
 ViennaRNA package (RNAForester)
+
 locarna 1.7.4
+
+RNAShapes

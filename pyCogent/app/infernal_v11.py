@@ -131,7 +131,7 @@ class Cmalign(CommandLineApplication):
     '--noprob':FlagParameter(Prefix='--',Name='noprob'),\
 
     # --cpu <n> Number of parallel threads to use while computing n >= 1 (default all cores)
-    '--outformat':ValuedParameter(Prefix='--',Name='outformat',Delimiter=' '),\
+    '--cpu':ValuedParameter(Prefix='--',Name='cpu',Delimiter=' '),\
     
     
     }
@@ -964,7 +964,7 @@ class Cmstat(CommandLineApplication):
         """
         return help_str
 
-def cmbuild_from_alignment(aln, structure_string, refine=False, calibrate=False, \
+def cmbuild_from_alignment(aln, structure_string, refine=False, \
     return_alignment=False,params=None):
     """Uses cmbuild to build a CM file given an alignment and structure string.
     
@@ -1012,16 +1012,7 @@ def cmbuild_from_alignment(aln, structure_string, refine=False, calibrate=False,
     
     res = app(filepaths)
 
-    #calibrate model if needed
-    if calibrate:
-        calapp = Cmcalibrate(WorkingDir='/tmp')
-        calres = calapp(cm_path)
-    #don't clean up if calibrated because need temp file binary data for calibration
-    cm_file = ""
-    if calibrate:
-        cm_file = res['CmFile']
-    else:
-        cm_file = res['CmFile'].read()
+    cm_file = res['CmFile'].read()
     
     if return_alignment:
         #If alignment was refined, return refined alignment and structure,
@@ -1029,12 +1020,9 @@ def cmbuild_from_alignment(aln, structure_string, refine=False, calibrate=False,
         #return path to file if 
         if refine:
             aln_file_string = res['Refined'].read()
-            if not calibrate:
-                res.cleanUp()
+        res.cleanUp()
         return cm_file, aln_file_string
     #Just return cm_file
-    elif calibrate:
-        return cm_file
     else:
         res.cleanUp()
         return cm_file
@@ -1067,13 +1055,16 @@ def cmbuild_from_file(stockholm_file_path, refine=False,calibrate=False, \
         calibrate=calibrate, return_alignment=return_alignment,params=params)
     return res
 
-def calibrate_file(cm_file_path, params=None):
+def calibrate_file(cm_file_path, cpus=1, params=None):
     '''calls cmcalibrate on CM file passed
 
         -cm_file_path: Path to the CM built by cmbuild
+        -cpus: number of cpus to use for calibration
     '''
     if params is None:
         params = {}  
+
+    params["--cpu"] = cpus
 
     app = Cmcalibrate(WorkingDir='/tmp', params=params)
     res = app(cm_file_path)

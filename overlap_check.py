@@ -25,7 +25,7 @@ if __name__ == "__main__":
         groups.remove("fasta_groups")
     sizegroups = len(groups)
     #get total number fo groups in the round, add 1 for looping
-    print str(sizegroups-1) + " groups"
+    print str(sizegroups) + " groups"
     #write out all group names for column
     for x in range(sizegroups):
         overlapfile.write(groups[x] + ",")
@@ -33,6 +33,14 @@ if __name__ == "__main__":
     #compare all group sequences to other sequences
     countmatrix = zeros(shape=(sizegroups, sizegroups), dtype=int)
     for group, gfile in enumerate(groups):
+        if not exists(basefolder + gfile + "/" + rnd + "hits.txt"):
+            #write empty row for group
+            overlapfile.write(gfile + ",")
+            for x in range(sizegroups):
+                overlapfile.write("-,")
+                countmatrix[group][x] = -1
+            overlapfile.write("\n")
+            continue
         #write out groupname to csv file as row indicator
         overlapfile.write(gfile + ",")
 
@@ -51,6 +59,10 @@ if __name__ == "__main__":
         dupefile = open(basefolder + gfile + "/" + rnd + "dupes.txt", 'w')
         #go through all other groups and compare sequence headers
         for secgroup in range(group, sizegroups):
+            if not exists(basefolder + groups[secgroup] + "/" + rnd + "hits.txt"):
+                countmatrix[group][secgroup] = -1
+                overlapfile.write("-,")
+                continue
             count = 0
             if gfile != groups[secgroup]:  # only do comparison if needed
                 compfile = open(basefolder + groups[secgroup] + "/" + rnd + "hits.txt")

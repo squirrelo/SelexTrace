@@ -294,7 +294,7 @@ if __name__ == "__main__":
     else:
         print "Running uclust over sequences"
         #cluster the initial sequences by sequence simmilarity
-        clusters = cluster_seqs(args.i, args.sim, folderout=args.o, gapopen='10.0/*TI', gapext='10.0')
+        clusters = cluster_seqs(args.i, args.sim, folderout=args.o, gapopen='10.0', gapext='10.0')
 
         #print that shit to file
         cout = open(otufolder + "clusters.txt", 'w')

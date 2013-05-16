@@ -195,6 +195,27 @@ def make_r2r(insto, outfolder, group):
         p = Popen(["r2r", outfolder + "/" + group + ".sto", outfolder + "/" + group + ".pdf"], stdout=PIPE)
         p.wait()
 
+def group_run_infernal(lock, cmfile, basefolder, outfolder, rounds, score=0.0, mpi=False):
+    '''Wrapper for running a single group through infernal. Multiprocessing function'''
+    cmfile = open(outfolder + "/infernal_" + group + ".cm", 'w')
+    cmfile.write(cmbuild_from_file(outfile + "/bayesfold-aln.sto"))
+    cmfile.close()
+    cmfile = outfolder + "/infernal_" + group + ".cm"
+    calibrate_file(cmfile, cpus=rounds)
+    for rnd in range(rounds):
+        run_infernal(lock, cmfile, rnd+1, basefolder, outfolder, score=score, mpi=mpi)
+    logfile = open(outfolder + "/log.txt")
+    roundhits = logfile.readlines()[4:]
+    logfile.close()
+    roundhits.sort()
+    outfolder = outfolder[:-1][:outfolder.rfind("/")]
+    hitscsv = open(outfolder + "/infernalhits.csv", 'a')
+    hitscsv.write(group + ",")
+    for r in roundhits:
+        hitscsv.write(r.split()[2] + ",")
+    hitscsv.write("\n")
+
+
 
 def run_infernal(lock, cmfile, rnd, basefolder, outfolder, cpus=1, score=0.0, mpi=False):
     try:
@@ -399,8 +420,8 @@ if __name__ == "__main__":
         # keep refining while we are still grouping structs or we haven't hit hard limit
         while startcount != endcount and iteration < args.iter:  
             startcount = len(structgroups)
-            iteration += 1
             print "iteration " + str(iteration) + ": " + str(len(structgroups)) + " initial groups"
+            iteration += 1
 
             #Refold all the groups to get new consensus secondary structure
             #make a pool of workers, one for each cpu available
@@ -478,6 +499,8 @@ if __name__ == "__main__":
         ihits.write("round" + str(i) + ",")
     ihits.write("\n")
     ihits.close()
+
+
     #loop over each group and run infernal on it for all rounds
     for groupinfo in infernalorder:
         group = groupinfo[0]
@@ -485,8 +508,7 @@ if __name__ == "__main__":
             continue
         secs = time()
         skip = False
-        if exists(otufolder + group + "/R1hits.txt"):
-            skip = True
+
         #only run infernal if there were more than 100 total sequences in group
         if not skip:
             currotufolder = otufolder + group
@@ -505,30 +527,13 @@ if __name__ == "__main__":
             procs = int(floor(args.c/args.r))
             if procs == 0:
                 procs = 1
-            poolsize = args.r
-            if args.c < args.r:
-                poolsize = args.c
-            pool = Pool(processes=poolsize)
-            extracpus = args.c - (procs*poolsize)
+            pool = Pool(processes=procs
             for i in range(args.r, 0, -1):
-                #run cmsearch over every round of SELEX
-                #if there is extra cpu power, apply it!
-                if extracpus > 0:
-                    pool.apply_async(func=run_infernal, args=(lock, cmfile, i, args.f, currotufolder, procs+1, infernalscore))
-                    extracpus -= 1
-                else:
-                    pool.apply_async(func=run_infernal, args=(lock, cmfile, i, args.f, currotufolder, procs, infernalscore))
+                #run cmsearch over every round of SELEX  (lock, cmfile, basefolder, outfolder, rounds, score=0.0, mpi=False)
+                pool.apply_async(func=group_run_infernal, args=(lock, cmfile, i, args.f, currotufolder, procs+1, infernalscore))
             pool.close()
             pool.join()
-            logfile = open(otufolder + group + "/log.txt")
-            roundhits = logfile.readlines()[4:]
-            logfile.close()
-            roundhits.sort()
-            hitscsv = open(otufolder + "infernalhits.csv", 'a')
-            hitscsv.write(group + ",")
-            for r in roundhits:
-                hitscsv.write(r.split()[2] + ",")
-            hitscsv.write("\n")
+
             print group + "\tRuntime: " + str((time() - secs) / 60) + " min"
         else:
             print group + "\talready run"

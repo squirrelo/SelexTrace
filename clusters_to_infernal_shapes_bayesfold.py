@@ -426,7 +426,7 @@ if __name__ == "__main__":
         #sort all structure sequences by count
             for struct in structgroups:
                 structgroups[struct].sort(reverse=True, key=lambda count: int(count[0].split('_')[1]))
-        print str(len(structgroups)) + " final groups (" + str((time() - secs) / 60) + "m)"
+        print str(len(structgroups)) + " final groups (" + str((time() - secs) / 3600) + " hrs)"
 
         #write out fasta files for groups: header of each sequence in the group
         mkdir(otufolder+"fasta_groups")
@@ -447,7 +447,7 @@ if __name__ == "__main__":
         pool.apply_async(func=run_fold_for_infernal, args=(groupnum, otufolder+"fasta_groups/" + group, otufolder, args.minseqs))
     pool.close()
     pool.join()
-    print "Runtime: " + str((time() - secs) / 3600) + "h"
+    print "Runtime: " + str((time() - secs) / 3600) + " hrs"
 
     #get sequence counts for each group
     infernalorder = []
@@ -529,7 +529,7 @@ if __name__ == "__main__":
             for r in roundhits:
                 hitscsv.write(r.split()[2] + ",")
             hitscsv.write("\n")
-            print group + "\tRuntime: " + str((time() - secs) / 60) + "m"
+            print group + "\tRuntime: " + str((time() - secs) / 60) + " min"
         else:
             print group + "\talready run"
             logfile = open(otufolder + group + "/log.txt")

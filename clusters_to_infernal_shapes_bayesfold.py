@@ -241,8 +241,8 @@ if __name__ == "__main__":
     (Default 0.99)")
     parser.add_argument('--minseqs', type=int, default=100, help="Minimum number of sequences for \
     groups to be significant (Default 100)")
-    parser.add_argument('--iter', type=int, default=1, help="Max number of interations during \
-    RNAForester grouping (Default 1)")
+    parser.add_argument('--iter', type=int, default=10, help="Max number of interations during \
+    RNAForester grouping (Default 10)")
     parser.add_argument('--rsc', type=float, default=0.5, help="Score cutoff for rnaforester \
     (Default 0.5)")
     parser.add_argument('--isc', type=float, default=0.0, help="Score cutoff for infernal.\

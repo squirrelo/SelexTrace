@@ -21,7 +21,7 @@ if __name__ == "__main__":
         groups.remove("fasta_groups")
     sizegroups = len(groups)
     groups.sort()
-    #get total number fo groups in the round, add 1 for looping
+    #get total number fo groups in the round
     print str(sizegroups) + " groups"
     #compare all group sequences to other sequences
     countmatrix = zeros(shape=(sizegroups, sizegroups), dtype=float)

@@ -241,9 +241,11 @@ if __name__ == "__main__":
     (Default 0.99)")
     parser.add_argument('--minseqs', type=int, default=100, help="Minimum number of sequences for \
     groups to be significant (Default 100)")
+    parser.add_argument('--iter', type=int, default=1, help="Max number of interations during \
+    RNAForester grouping (Default 1)")
     parser.add_argument('--rsc', type=float, default=0.5, help="Score cutoff for rnaforester \
     (Default 0.5)")
-    parser.add_argument('--isc', type=int, default=0.0, help="Score cutoff for infernal.\
+    parser.add_argument('--isc', type=float, default=0.0, help="Score cutoff for infernal.\
     (Default 0.0)")
     parser.add_argument('-c', type=int, default=1, help="Number of CPUs to use \
     (Default 1)")
@@ -255,15 +257,15 @@ if __name__ == "__main__":
     if args.c < 1:
         print "ERROR: CPU count must be at least 1!"
         exit(1)
-    if args.isc < 0:
+    if args.isc < 0.0:
         print "ERROR: Infernal score cutoff must be greater than 0!"
         exit(1)
     if args.sim < 0.0 or args.sim > 1.0:
         print "ERROR: Infernal score cutoff must be greater than 0!"
         exit(1)
-    compscore = False
-    if args.rsc == -10000:
-        compscore = True
+    if args.iter < 1:
+        print "ERROR: Must have at least one iteration!"
+        exit(1)
 
     foresterscore = args.rsc
     infernalscore = args.isc
@@ -367,7 +369,7 @@ if __name__ == "__main__":
 
         startcount = 1
         endcount = 0
-        iteration = 1
+        iteration = 0
         secs = time()
         #wipe out clusters dict to save memory
         clusters = 0              
@@ -394,12 +396,13 @@ if __name__ == "__main__":
         for key in hold.keys():
             structgroups[key] = hold[key]
             
-
-        while startcount != endcount:  # keep refining while we are still grouping structs
+        # keep refining while we are still grouping structs or we haven't hit hard limit
+        while startcount != endcount and iteration < args.iter:  
             startcount = len(structgroups)
             print "iteration " + str(iteration) + ": " + str(len(structgroups)) + " initial groups"
-            #Refold all the groups to get new consensus secondary structure
+            iteration += 1
 
+            #Refold all the groups to get new consensus secondary structure
             #make a pool of workers, one for each cpu available
             manager = Manager()
             hold = manager.dict()
@@ -419,7 +422,6 @@ if __name__ == "__main__":
             structgroups = group_by_forester(structgroups, foresterscore)
 
             endcount = len(structgroups)
-            iteration += 1
         #end while
         #sort all structure sequences by count
             for struct in structgroups:

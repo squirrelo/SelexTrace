@@ -117,9 +117,6 @@ def run_fold_for_infernal(currgroup, groupfasta, basefolder, minseqs=1):
         #create output folder for group
         mkdir(currotufolder)
         out += str(aln.getNumSeqs()) + " unique sequences\n"
-        fout = open(currotufolder + "/unique.fasta", 'w')
-        fout.write(aln.toFasta())
-        fout.close()
         out += "Structure: " + struct + "\n"
         #write out alignment and structure in fasta and stockholm formats
         #write that shit

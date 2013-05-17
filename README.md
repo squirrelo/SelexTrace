@@ -19,6 +19,6 @@ infernal 1.1r2
 
 ViennaRNA package (RNAForester)
 
-locarna 1.7.4
+BayesFold
 
 RNAShapes

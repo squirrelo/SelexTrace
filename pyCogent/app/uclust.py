@@ -118,6 +118,8 @@ class Uclust(CommandLineApplication):
         '--optimal':FlagParameter('--',Name='optimal'),
 
         '--stable_sort':FlagParameter('--',Name='stable_sort'),
+
+        '--hsp':ValuedParameter('--',Name='hsp',Delimiter=' '),
     }
      
     _suppress_stdout = False

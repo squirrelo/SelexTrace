@@ -1,4 +1,3 @@
-
 from strip_primers import strip_primer
 from os.path import exists
 from os import mkdir, walk
@@ -10,7 +9,7 @@ from remove_duplicates import remove_duplicates
 from tempfile import mktemp
 from time import time
 import argparse
-from utils import write_fasta_list, write_fasta_dict
+from stutils import write_fasta_list, write_fasta_dict
 
 
 def rem_N_short(seqs, minlen=1):

@@ -211,7 +211,6 @@ def run_infernal(lock, cmfile, rnd, basefolder, outfolder, cpus=1, score=0.0, mp
         for hit in result:
             fout.write(hit[0] + "," + str(hit[14]) + "," + str(hit[15]) + "\n")
         fout.close()
-        stdout.flush()
         lock.acquire()
         fout = open(outfolder + "/log.txt", 'a')
         fout.write("Round " + str(rnd) + ": " + str(len(result)) + " hits\n")
@@ -447,7 +446,7 @@ if __name__ == "__main__":
                 gout.write(">%s\n%s\n" % g)
             gout.close()
     else:
-        print str(len(walk(otufolder + "fasta_groups/").next()[1])) + " groups"
+        print "Previously grouped"
 
     print "==Creating CM and r2r structures=="
     secs = time()

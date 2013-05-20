@@ -447,7 +447,7 @@ if __name__ == "__main__":
                 gout.write(">%s\n%s\n" % g)
             gout.close()
     else:
-        print str(len(structgroups)) + " groups"
+        print str(len(walk(otufolder + "fasta_groups/").next()[1])) + " groups"
 
     print "==Creating CM and r2r structures=="
     secs = time()

@@ -83,7 +83,7 @@ if __name__ == "__main__":
 
     #now create percentages matrix
     for group in range(sizegroups):
-        overlapfile.write("group" + str(group+1) + ",")
+        overlapfile.write(groups[group] + ",")
         if countmatrix[group][group] != -1:
              #write out the dashes needed to line up the matrix in file
             for x in range(group):

@@ -142,7 +142,7 @@ def score_rnaforester(struct1, struct2):
     #return gigantically negative number if no structure for one struct
     if "(" not in struct1 or "(" not in struct2:
         raise ValueError(struct1 + "\n" + struct2 + "\nNo pairing in given structures!")
-    p = Popen(["RNAforester", "--score", "-r"], stdin=PIPE, stdout=PIPE)
+    p = Popen(["RNAforester", "--score", "-r", "-bd=-1"], stdin=PIPE, stdout=PIPE)
     p.stdin.write(''.join([struct1, "\n", struct2, "\n&"]))
     return float(p.communicate()[0].split("\n")[-2])
 

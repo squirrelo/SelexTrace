@@ -23,4 +23,4 @@ def bayesfold(seqs, temperature=37):
         map(str, aln.iterSeqs()), str(temperature))
     bayescalc = BayesCalculation(test)
     bayescalc.run()
-    return str(bayescalc.Alignment.Structures).split()[1]
+    return aln, str(bayescalc.Alignment.Structures).split()[1]

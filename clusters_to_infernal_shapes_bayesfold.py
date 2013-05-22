@@ -12,9 +12,9 @@ from datetime import datetime
 from multiprocessing import Pool, Manager
 import argparse
 from math import floor, ceil
-from Bayes.alignment import RNAAlignment, RNAStructureAlignment  #bayesfold folding
+from Bayes.alignment import RNAAlignment, RNAStructureAlignment  # bayesfold folding
 from cogent.app.muscle_v38 import align_unaligned_seqs
-from stutils import cluster_seqs, remove_duplicates, write_fasta_list, get_shape
+from stutils import cluster_seqs, get_shape
 
 
 def fold_clusters(lock, cluster, seqs, otufolder):
@@ -84,8 +84,8 @@ def bayesfold(seqsin):
     for item in aln.Seqs:
         seqs.append(str(item))
     sequences = RNAAlignment(sequences=seqs)
-    structures = sequences.fold(temperature, 2, 100) 
-    structalign = str(RNAStructureAlignment(sequences,structures,temperature)).split("\n")
+    structures = sequences.fold(temperature, 2, 100)
+    structalign = str(RNAStructureAlignment(sequences, structures, temperature)).split("\n")
     for line in structalign:
         if ".." in line:
             struct = line
@@ -142,7 +142,7 @@ def score_rnaforester(struct1, struct2):
     #return gigantically negative number if no structure for one struct
     if "(" not in struct1 or "(" not in struct2:
         raise ValueError(struct1 + "\n" + struct2 + "\nNo pairing in given structures!")
-    p = Popen(["RNAforester", "--score", "-r", "-bd=-1"], stdin=PIPE, stdout=PIPE)
+    p = Popen(["RNAforester", "--score", "-r"], stdin=PIPE, stdout=PIPE)
     p.stdin.write(''.join([struct1, "\n", struct2, "\n&"]))
     return float(p.communicate()[0].split("\n")[-2])
 
@@ -165,6 +165,7 @@ def group_by_forester(structgroups, foresterscore):
     for key in topop:  # pop all simmilar structures found
         structgroups.pop(key)
     return structgroups
+
 
 def group_by_forester_multi(structgroups, foresterscore, hold):
     '''Wrapper function for group_by_forester for multithreading'''
@@ -277,7 +278,7 @@ if __name__ == "__main__":
 
     #print out run info to a file
     infofile = open(otufolder + "runparams.txt", 'w')
-    infofile.write( ''.join(["FASTA file:\t\t\t\t", args.i, "\n",
+    infofile.write(''.join(["FASTA file:\t\t\t\t", args.i, "\n",
                     "Base folder:\t\t\t", args.f, "\n",
                     "Output folder:\t\t\t", args.o, "\n"
                     "Selection round:\t\t", str(args.r), "\n",
@@ -300,7 +301,7 @@ if __name__ == "__main__":
                 currclust = header
                 clusters[currclust] = []
             else:
-                clusters[currclust].append((header,seq))
+                clusters[currclust].append((header, seq))
     else:
         print "Running uclust over sequences"
         #cluster the initial sequences by sequence simmilarity
@@ -323,7 +324,7 @@ if __name__ == "__main__":
         cfo = open(otufolder + "cluster_structs.fasta", 'w')
         cfo.close()
 
-        print "Running BayesFold over "+ str(len(clusters)) +" clusters"
+        print "Running BayesFold over " + str(len(clusters)) + " clusters"
         secs = time()
         #make a pool of workers, one for each cpu available
         manager = Manager()
@@ -356,7 +357,6 @@ if __name__ == "__main__":
     if count != len(clusters):
         raise AssertionError(str(count) + " structures, " + str(len(clusters)) + " clusters. Not all clusters folded!")
 
-
     print "Runtime: " + str((time() - secs)/60) + " min"
     print "==Grouping clusters by secondary structure=="
     #GROUP THE SECONDARY STRUCTURES BY RNAFORESTER
@@ -382,7 +382,7 @@ if __name__ == "__main__":
         iteration = 0
         secs = time()
         #wipe out clusters dict to save memory
-        clusters = 0              
+        clusters = 0
 
         print "start: " + str(len(structgroups)) + " initial groups"
         #initial clustering by structures generated in first folding, broken out by shapes
@@ -405,9 +405,9 @@ if __name__ == "__main__":
         structgroups = {}
         for key in hold.keys():
             structgroups[key] = hold[key]
-            
+
         # keep refining while we are still grouping structs or we haven't hit hard limit
-        while startcount != endcount and iteration < args.iter:  
+        while startcount != endcount and iteration < args.iter:
             startcount = len(structgroups)
             iteration += 1
             print "iteration " + str(iteration) + ": " + str(len(structgroups)) + " initial groups"
@@ -427,7 +427,7 @@ if __name__ == "__main__":
             structgroups = {}
             for key in hold.keys():
                 structgroups[key] = hold[key]
-            
+
             #group remaining structures using rnaforester
             structgroups = group_by_forester(structgroups, foresterscore)
 
@@ -440,7 +440,7 @@ if __name__ == "__main__":
 
         #write out fasta files for groups: header of each sequence in the group
         mkdir(otufolder+"fasta_groups")
-        for num,group in enumerate(structgroups):
+        for num, group in enumerate(structgroups):
             gout = open(otufolder+"fasta_groups/group_" + str(num) + ".fasta", 'w')
             for g in structgroups[group]:
                 gout.write(">%s\n%s\n" % g)

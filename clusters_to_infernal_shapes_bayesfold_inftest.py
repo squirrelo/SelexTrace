@@ -12,7 +12,7 @@ from datetime import datetime
 from multiprocessing import Pool, Manager
 import argparse
 from math import floor, ceil
-from alignment import RNAAlignment, RNAStructureAlignment  #bayesfold folding
+from Bayes.alignment import RNAAlignment, RNAStructureAlignment  #bayesfold folding
 from cogent.app.muscle_v38 import align_unaligned_seqs
 from stutils import cluster_seqs, remove_duplicates, write_fasta_list, get_shape
 

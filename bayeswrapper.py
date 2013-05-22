@@ -18,7 +18,7 @@ class BayesInputWrapper:
 def bayesfold(seqsin, temperature=37):
     '''Takes in a list of unaligned tuples [(header, seq)] and returns
     most likely structure from bayesfold'''
-    seqs = LoadSeqs(data=seqsin, moltype=RNA, aligned=false)
+    seqs = LoadSeqs(data=seqsin, moltype=RNA, aligned=False)
     aln = align_unaligned_seqs(seqs, RNA)
     test = BayesInputWrapper('test', aln.getSeqNames(),
         map(str, aln.iterSeqs()), str(temperature))

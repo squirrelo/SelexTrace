@@ -29,12 +29,11 @@ def fold_clusters(lock, cluster, seqs, otufolder):
         cfo = open(otufolder + "cluster_structs.fasta", 'a')
         cfo.write(">" + cluster + "\n" + struct + "\n")
         cfo.close()
+        lock.release()
         #print cluster + ": " + struct
         #stdout.flush()
     except Exception, e:
-        print e, "\n", cluster, ":", seqs[1]
-        if "CommandLineAppResult" in str(e):
-            raise Exception("ERROR FOLDING SEQUENCES")
+        cluster, struct, "\nERROR!"
         stdout.flush()
         lock.release()
     finally:

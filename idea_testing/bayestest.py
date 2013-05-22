@@ -1,6 +1,7 @@
-from Bayes.alignment import RNAAlignment, RNAStructureAlignment
-from sys import argv
+from Bayes.bayes import BayesCalculation
 from cogent.parse.fasta import MinimalFastaParser
+from sys import argv
+from cogent import LoadSeqs, RNA
 
 class BayesWrapper:
     def __init__(self,name,labels,seqs):
@@ -15,17 +16,17 @@ class BayesWrapper:
 
 
 if __name__ == "__main__":
-    headers = []
-    seqs = []
-    for header, seq in MinimalFastaParser(open(argv[1])):
-        if header == "SS_struct":
-            continue
-        headers.append(header)
-        seqs.append(seq)
+    aln = LoadSeqs(argv[1], moltype=RNA)
+    headers = aln.getSeqNames()
+    seqs = map(str, aln.iterSeqs())
+    print headers
+    print seqs
     test = BayesWrapper('test', headers, seqs)
     temperature = 37
-    sequences = RNAAlignment(sequences=seqs)
-    structures = sequences.fold(temperature, 2,
-                100) 
-    alignment = RNAStructureAlignment(sequences,structures,temperature).Structures
-    print str(alignment)  # .split("\n")[0]
+    bayescalc = BayesCalculation(test)
+    bayescalc.run()
+    print str(bayescalc.Alignment.Structures).split()[1]
+    #sequences = RNAAlignment(sequences=seqs)
+    #structures = sequences.fold(temperature, 2, 100) 
+    #alignment = RNAStructureAlignment(sequences,structures,temperature).Structures
+    #print str(alignment).split("\n")[0]

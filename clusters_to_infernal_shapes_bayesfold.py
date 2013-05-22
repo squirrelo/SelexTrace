@@ -12,10 +12,8 @@ from datetime import datetime
 from multiprocessing import Pool, Manager
 import argparse
 from math import floor, ceil
-from Bayes.alignment import RNAAlignment, RNAStructureAlignment  # bayesfold folding
-from cogent.app.muscle_v38 import align_unaligned_seqs
 from stutils import cluster_seqs, get_shape
-
+from bayeswrapper import bayesfold
 
 def fold_clusters(lock, cluster, seqs, otufolder):
     '''Function for multithreading.
@@ -72,25 +70,6 @@ def fold_groups(seqs, struct, hold, numkept=None):
     except Exception, e:
         print str(e)
         stdout.flush()
-
-
-def bayesfold(seqsin):
-    '''Runs BayesFold on a set of sequences in MinimalFastaParser format
-    [(header, seq), (header, seq)] and returns alignment and structure'''
-    #make sure group has enough sequences before continuing
-    temperature = 37
-    seqs = []
-    aln = align_unaligned_seqs(seqsin, RNA)
-    for item in aln.Seqs:
-        seqs.append(str(item))
-    sequences = RNAAlignment(sequences=seqs)
-    structures = sequences.fold(temperature, 2, 100)
-    structalign = str(RNAStructureAlignment(sequences, structures, temperature)).split("\n")
-    for line in structalign:
-        if ".." in line:
-            struct = line
-            break
-    return aln, struct
 
 
 def run_fold_for_infernal(currgroup, groupfasta, basefolder, minseqs=1):

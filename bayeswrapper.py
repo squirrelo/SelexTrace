@@ -1,6 +1,6 @@
 from cogent.app.muscle_v38 import align_unaligned_seqs
 from Bayes.bayes import BayesCalculation
-from cogent import RNA
+from cogent import LoadSeqs, RNA
 
 
 class BayesInputWrapper:
@@ -15,9 +15,10 @@ class BayesInputWrapper:
         self.id = '12345'
 
 
-def bayesfold(seqs, temperature=37):
+def bayesfold(seqsin, temperature=37):
     '''Takes in a list of unaligned tuples [(header, seq)] and returns
     most likely structure from bayesfold'''
+    seqs = LoadSeqs(data=seqsin, moltype=RNA)
     aln = align_unaligned_seqs(seqs, RNA)
     test = BayesInputWrapper('test', aln.getSeqNames(),
         map(str, aln.iterSeqs()), str(temperature))

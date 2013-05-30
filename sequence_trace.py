@@ -52,9 +52,10 @@ def multi_wrapper(knownseq, testseq, header, lock, fout):
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Finds instances of ")
-    parser.add_argument('-s', required=True, help="Sequence being serched for \
-        over all rounds.")
+    parser = argparse.ArgumentParser(description="Finds instances of a sequence \
+        over multiple selex rounds")
+    parser.add_argument('-s', required=True, help="FASTA of sequences being \
+        serched for over all rounds.")
     parser.add_argument('-f', required=True, help="Base folder holding FASTA \
         files for all unique sequences in rounds of selection ")
     parser.add_argument('-r', required=True, type=int, help="Round of selection \
@@ -66,29 +67,39 @@ if __name__ == "__main__":
     basefolder = args.f
     if basefolder[-1] != "/":
         basefolder += "/"
-    knownseq = args.s
+    knownfile = args.s
     rnd = args.r
     if args.c < 1:
         raise ValueError("CPUs must be greater than 0!")
 
+    knownfile = open(knownfile, 'U')
+    knownseqs = []
+    #build the storage vector holding known seq and output file for seq
+    for header, seq in MinimalFastaParser(knownfile):
+        seqfile = open(basefolder + seq + ".fasta")
+        seqfile.write(">%s\n%s\n" % (header, seq))
+        knownseqs.append((seq, seqfile))
+    knownfile.close()
+
     #loop over all the rounds to find sequence matches
-    fout = open("matches.fasta", 'w')
-    fout.write(">%s\n%s\n" % ("SeedSequence", knownseq))
     for currrnd in range(1, rnd+1):
         rndname = "R" + str(currrnd)
         print rndname
-        fout.write(">%s\n%s\n" % (rndname, rndname))
+        #print round info to each output file
+        for info in knownseqs:
+            info[1].write(">%s\n%s\n" % (rndname, rndname))
         #multiprocess each round
         manager = Manager()
         hold = manager.dict()
         pool = Pool(processes=args.c)
         lock = manager.Lock()
-        #run the pool over all sequences for comparison
         rndfile = open(basefolder + rndname + "/" + rndname + "-Unique.fasta")
+        #run over each sequence in the round file
         for header, seq in MinimalFastaParser(rndfile):
-            #add another for loop here to go through multiple knownseqs
-            pool.apply_async(func=multi_wrapper, args=(knownseq, seq, header, lock, fout))
+            #comparing them to each known sequence
+            for knowninfo in knownseqs:
+                pool.apply_async(func=multi_wrapper, args=(knowninfo[0], seq, header,
+                    lock, knowninfo[1]))
         rndfile.close()
         pool.close()
         pool.join()
-    fout.close()

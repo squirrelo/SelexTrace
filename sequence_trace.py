@@ -54,7 +54,7 @@ def multi_wrapper(knownseq, testseq, header, lock, fout):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Finds instances of a sequence \
         over multiple selex rounds")
-    parser.add_argument('-s', required=True, help="FASTA of sequences being \
+    parser.add_argument('-i', required=True, help="FASTA of sequences being \
         serched for over all rounds.")
     parser.add_argument('-f', required=True, help="Base folder holding FASTA \
         files for all unique sequences in rounds of selection ")
@@ -67,7 +67,7 @@ if __name__ == "__main__":
     basefolder = args.f
     if basefolder[-1] != "/":
         basefolder += "/"
-    knownfile = args.s
+    knownfile = args.i
     rnd = args.r
     if args.c < 1:
         raise ValueError("CPUs must be greater than 0!")
@@ -76,7 +76,7 @@ if __name__ == "__main__":
     knownseqs = []
     #build the storage vector holding known seq and output file for seq
     for header, seq in MinimalFastaParser(knownfile):
-        seqfile = open(basefolder + seq + ".fasta")
+        seqfile = open(basefolder + header + ".fasta", 'w')
         seqfile.write(">%s\n%s\n" % (header, seq))
         knownseqs.append((seq, seqfile))
     knownfile.close()

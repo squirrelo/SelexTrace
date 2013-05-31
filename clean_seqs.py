@@ -99,7 +99,7 @@ if __name__ == "__main__":
         #allowing up to 2 mismatches in the primer
         print "Primer stripping"
         secs = time()
-        kept, rem = strip_primer(filein, args.3p, 2)
+        kept, rem = strip_primer(filein, args.3p, maxmismatch=2, keep_primer=True)
         log.write("Primer stripping\n" + str(len(kept)) + " sequences left, " + \
         str(len(rem)) + " sequences removed")
         print str(len(kept)) + " sequences left, " + \

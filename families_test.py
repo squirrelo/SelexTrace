@@ -61,17 +61,18 @@ if __name__ == "__main__":
                 break
         if currfam == -1:
             fams.append(set([]))
+            fams[currfam].add(currgroup)
 
         #count over row and check if any are over 50%
         for rowpos in range(pos+1, sizegroups):
             if countmatrix[pos][rowpos] > 0.5:
                     fams[currfam].add(groups[rowpos])
                     famed.add(groups[rowpos])
-        #count over the row and check if any are over 50%
-        for colpos in range(pos):
-            if countmatrix[colpos][pos] > 0.5:
-                fams[currfam].add(groups[colpos])
-                famed.add(groups[colpos])
+        #count over the col and check if any are over 50%
+        #for colpos in range(pos):
+        #    if countmatrix[colpos][pos] > 0.5:
+        #        fams[currfam].add(groups[colpos])
+        #        famed.add(groups[colpos])
 
     #print out families to file
     fout = open(basefolder + "families.txt", 'w')

@@ -132,14 +132,16 @@ def group_by_forester(structgroups, foresterscore):
             continue
         for teststruct in structgroups:  # else compare it to all other structures
             #only compare if not equal and not already grouped
-            if teststruct != currstruct and teststruct not in topop:
-                score = score_rnaforester(currstruct, teststruct)
-                if score > foresterscore:
-                    #add matched groups clusters to current group
-                    #then wipe test group to save memory and add to topop
-                    structgroups[currstruct].extend(structgroups[teststruct])
-                    structgroups[teststruct] = 0
-                    topop.add(teststruct)
+            if teststruct == currstruct or teststruct in topop:
+                continue
+            score = score_rnaforester(currstruct, teststruct)
+            if score > foresterscore:
+                #add matched groups clusters to current group
+                #then wipe test group to save memory and add to topop
+                structgroups[currstruct].extend(structgroups[teststruct])
+                structgroups[teststruct] = 0
+                topop.add(teststruct)
+                break
     for key in topop:  # pop all simmilar structures found
         structgroups.pop(key)
     return structgroups

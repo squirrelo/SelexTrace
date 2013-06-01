@@ -11,18 +11,14 @@ from time import time
 from datetime import datetime
 from multiprocessing import Pool, Manager
 import argparse
-from math import floor, ceil
-from stutils import cluster_seqs, get_shape
-from bayeswrapper import bayesfold
+from math import floor, ceil, log
 from random import shuffle
+from stutils import cluster_seqs
+from bayeswrapper import bayesfold
 
 def fold_clusters(lock, cluster, seqs, otufolder):
     '''Function for multithreading.
     Computes structure for a cluster and writes it to file'''
-    #assuming that the fasta has 10 or more sequences in it. Safe assumption
-    #if this is a significant cluster
-    #only using 10 because this is initial structure calc so needs to be fast
-    #and this gives a very good approximation for the initial rnaforester grouping
     try:
         aln, struct = bayesfold(seqs)
         #write structure out to file
@@ -73,11 +69,11 @@ def fold_groups(seqs, struct, hold, numkept=None):
 
 
 def run_fold_for_infernal(currgroup, groupfasta, basefolder, minseqs=1):
-    '''Function for multithreading
-    creates the final BayesFold alignment and writes to files, then r2r struct'''
+    '''Function for multithreading. Creates the final BayesFold alignment and 
+    writes to files, then r2r struct'''
     try:
-        #run locana-p on the superclusters to get the alignment and consensus structure
-        #skip if already run and program just crashsed or whatever
+        #run locana-p on the superclusters to get alignment and structure
+        #skip if already run and program just crashed or whatever
         currotufolder = basefolder + "group_" + str(currgroup)
         if exists(currotufolder):
             return ""
@@ -90,8 +86,7 @@ def run_fold_for_infernal(currgroup, groupfasta, basefolder, minseqs=1):
         out += "\n" + str(count) + " sequences\n"
         if count < minseqs:
             return ""
-        #make sure group has enough sequences before continuing
-        #run BayesFold on the at most 50 most abundant sequences in the group
+        #run BayesFold on sequences in the group
         aln, struct = bayesfold(seqs)
         #create output folder for group
         mkdir(currotufolder)
@@ -120,58 +115,57 @@ def score_rnaforester(struct1, struct2):
     '''returns relative score of two structures'''
     #return gigantically negative number if no structure for one struct
     if "(" not in struct1 or "(" not in struct2:
-        raise ValueError(struct1 + "\n" + struct2 + "\nNo pairing in given structures!")
+        raise ValueError(struct1 + "\n" + struct2 + "\nNo pairing in structs!")
     p = Popen(["RNAforester", "--score", "-r"], stdin=PIPE, stdout=PIPE)
     p.stdin.write(''.join([struct1, "\n", struct2, "\n&"]))
     return float(p.communicate()[0].split("\n")[-2])
 
 
-def group_by_forester(structgroups, foresterscore):
-    topop = set([])
-    for currstruct in structgroups:  # for each structure
-        if currstruct in topop:  # skip if we already grouped this one
-            continue
-        for teststruct in structgroups:  # else compare it to all other structures
-            #only compare if not equal and not already grouped
-            if teststruct != currstruct and teststruct not in topop:
-                score = score_rnaforester(currstruct, teststruct)
-                if score > foresterscore:
-                    #add matched groups clusters to current group
-                    #then wipe test group to save memory and add to topop
-                    structgroups[currstruct].extend(structgroups[teststruct])
-                    structgroups[teststruct] = 0
-                    topop.add(teststruct)
-                    break
-    for key in topop:  # pop all simmilar structures found
-        structgroups.pop(key)
-    return structgroups
+def build_reference(dictkeys, refsize):
+    '''Creates a random list of references comprising percent of total list'''
+    shuffle(dictkeys)
+    #needed in case passed a float
+    refsize = int(refsize)
+    #return reference, nonreference by slicing list
+    return dictkeys[:refsize], dictkeys[refsize:]
 
 
-def fit_to_forester(structgroups, seedgroups):
-    topop = set([])
-    for currstruct in structgroups:
-        for teststruct in seedgroups:
-            if teststruct == currstruct:
-                seedgroups[teststruct].extend(structgroups[currstruct])
-                structgroups[teststruct] = 0
-                topop.add(currstruct)
-                break
-            score = score_rnaforester(currstruct, teststruct)
-            if score >= foresterscore:
-                seedgroups[teststruct].extend(structgroups[currstruct])
-                structgroups[teststruct] = 0
-                topop.add(currstruct)
-                break
-    for key in topop:  # pop all simmilar structures found
-        structgroups.pop(key)
-        #returns grouped, ungrouped clusters
-    return seedgroups, structgroups
+def group_to_reference(fulldict, reference, nonref, foresterscore):
+    nogroup = []
+    for currstruct in nonref:
+        score = foresterscore
+        bestref = ""
+        for teststruct in reference:
+            holdscore = score_rnaforester(currstruct, teststruct)
+            if holdscore > score:
+                score = holdscore
+                bestref = teststruct
+        if bestref != "":
+            fulldict[bestref].extend(fulldict[currstruct])
+            fulldict.pop(currstruct)
+        else:
+            nogroup.append(currstruct)
+    return fulldict, nogroup
 
 
-def group_by_forester_multi(structgroups, foresterscore, hold):
-    '''Wrapper function for group_by_forester for multithreading'''
-    groups = group_by_forester(structgroups, foresterscore)
-    hold.update(groups)
+def group_denovo(fulldict, keys, foresterscore):
+    topop = []
+    for pos, currstruct in enumerate(keys):
+        score = foresterscore
+        bestref = ""
+        for secpos in range(pos+1, len(keys)):
+            holdscore = score_rnaforester(currstruct, keys[secpos])
+            if holdscore > score:
+                score = holdscore
+                bestref = keys[secpos]
+        if bestref != "":
+            fulldict[bestref].extend(fulldict[currstruct])
+            fulldict.pop(currstruct)
+            topop.append(pos)
+    topop.sort(reverse=True)
+    for pos in topop:
+        keys.pop(pos)
+    return fulldict, keys
 
 
 def make_r2r(insto, outfolder, group):
@@ -227,6 +221,7 @@ def run_infernal(lock, cmfile, rnd, basefolder, outfolder, cpus=1, score=0.0, mp
 
 if __name__ == "__main__":
     starttime = time()
+    #TURN INTO COGENT OPTION PARSING   cogent.util.option_parsing
     parser = argparse.ArgumentParser(description="Runs sequence clustering \
     and infernal over all rounds of a SELEX selection")
     parser.add_argument('-i', required=True, help="FASTA file of unique sequences sorted by abundance.")
@@ -276,6 +271,8 @@ if __name__ == "__main__":
         otufolder += "/"
     if not exists(otufolder):
         mkdir(otufolder)
+
+    print "Program started ", datetime.now()
 
     #print out run info to a file
     infofile = open(otufolder + "runparams.txt", 'w')
@@ -361,8 +358,6 @@ if __name__ == "__main__":
     print "Runtime: " + str((time() - secs)/60) + " min"
     print "==Grouping clusters by secondary structure=="
     #GROUP THE SECONDARY STRUCTURES BY RNAFORESTER
-    #logic: take random 300 sequences, cluster them, try and fit as many structs
-    #to those groups as possible. Recluster any that dont fit and repeat.
     secs = time()
     skipiter = False
     if exists(otufolder + "fasta_groups/"):
@@ -371,28 +366,35 @@ if __name__ == "__main__":
     if not skipiter:
         print "RNAforester score threshold: " + str(foresterscore)
         #Now need to iteratively refine the groups down
-        #check to make sure we need to first
-
-        startcount = 1
-        endcount = 0
         iteration = 0
         secs = time()
-        #wipe out clusters dict to save memory
-        clusters = 0
-
+        #creating reference subset, then de-novo grouping the references.
+        #then group to those references. Should speed things up significantly. 
         print "start: " + str(len(structgroups)) + " initial groups"
-        #initial clustering by structures generated in first folding
-        hold = structgroups.keys()
-        hold.shuffle()
-        hold = hold[:300]
-        initial = {key: structgroups[key] for key in hold}
-
-        notgrouped = {}
-        # keep refining while we are still grouping structs or we haven't hit hard limit
-        while len(notgrouped) > 0
+        finishlen = len(structgroups) * 0.01
+        reference, nonreference = build_reference(structgroups.keys(), finishlen)
+        print len(reference), "KEYS!", str((time() - secs) / 60), " min"
+        structgroups, reference = group_denovo(structgroups, reference, foresterscore)
+        print len(reference), "GROUPED REF!", str((time() - secs) / 3600), " hrs"
+        structgroups, ungrouped = group_to_reference(structgroups, reference, nonreference, foresterscore)
+        print len(ungrouped), "UNGROUPED!", str((time() - secs) / 3600), " hrs"
+        # keep refining while not at limit and are still grouping structs
+        startungrouped = 0
+        endungrouped = 1
+        while len(ungrouped) > finishlen and startungrouped != endungrouped:
+            startungrouped = len(ungrouped)
+            iteration += 1
+            print "iteration " + str(iteration) + ": " + str(len(structgroups)) + " initial groups"
+            reference, nonreference = build_reference(ungrouped, finishlen)
+            structgroups, reference = group_denovo(structgroups, reference, foresterscore)
+            structgroups, ungrouped = group_to_reference(structgroups, reference, nonreference, foresterscore)
+            print len(ungrouped), "UNGROUPED"
+            endungrouped = len(ungrouped)
+        #end while
+        structgroups, reference = group_denovo(structgroups, ungrouped, foresterscore)
         #sort all structure sequences by count
-            for struct in structgroups:
-                structgroups[struct].sort(reverse=True, key=lambda count: int(count[0].split('_')[1]))
+        for struct in structgroups:
+            structgroups[struct].sort(reverse=True, key=lambda count: int(count[0].split('_')[1]))
         print str(len(structgroups)) + " final groups (" + str((time() - secs) / 3600) + " hrs)"
 
         #write out fasta files for groups: header of each sequence in the group
@@ -404,6 +406,10 @@ if __name__ == "__main__":
             gout.close()
     else:
         print "Previously grouped"
+
+    #wipe out structgroups dict to save memory
+    structgroups.clear()
+    structgroups = 0
 
     print "==Creating CM and r2r structures=="
     secs = time()
@@ -427,7 +433,7 @@ if __name__ == "__main__":
         loginfo = log.readlines()
         log.close()
         infernalorder.append((group, int(loginfo[1].split()[0]), int(loginfo[2].split()[0])))
-    #write out file of seuquence counts
+    #write out file of sequence counts
     infernalorder.sort(reverse=True, key=lambda x: x[1])
     groupsizefile = open(otufolder + "/group_sizes.txt", 'w')
     groupsizefile.write("Group\tTotal Seqs\tUnique Seqs\n")

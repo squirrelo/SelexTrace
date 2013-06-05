@@ -169,30 +169,38 @@ def group_denovo(fulldict, keys, foresterscore):
 
 
 def group_by_forester(structgroups, foresterscore, specstructs=None):
-        '''Does initial grouping by way of de-novo reference creation and clustering
-            allstructs - dictionary with ALL structures and the sequences that fall in them
-            groupstructs - list of structures from allstructs that are being grouped
+        '''Does grouping by way of de-novo reference creation and clustering
+            structgroups - dictionary with ALL structures and the sequences that fall in them
+            foresterscore - minimum score to consider grouping structures
+            specstructs - a list of a subset of structures in structgroups to cluster
         '''
-        #for speed, get 1% or 300, whichever is smaller
-        finishlen = len(structgroups) * 0.01
-        if finishlen > 300:
-            finishlen = 300
-        #do initial reg grab by either all structures or specific ones passed
+        #just de-novo group if 10 or less to save time and effort
+        if len(structgroups) <= 10:
+            if specstructs == None:
+                structgroups, reference = group_denovo(structgroups, structgroups.keys(), foresterscore)
+            else:
+                structgroups, reference = group_denovo(structgroups, specstructs, foresterscore)
+            return structgroups
+        #for speed, get 1% as initial clustering. need at least 10 structs though
+        finishlen = int(ceil(len(structgroups) * 0.01))
+        if finishlen < 10:
+            finishlen = 10
+        #do initial ref grab by either all structures or specific ones passed
         if specstructs == None:
             reference, nonreference = build_reference(structgroups.keys(), finishlen)
         else:
             reference, nonreference = build_reference(specstructs, finishlen)
+        startungrouped = len(structgroups)
         structgroups, reference = group_denovo(structgroups, reference, foresterscore)
         structgroups, ungrouped = group_to_reference(structgroups, reference, nonreference, foresterscore)
+        endungrouped = len(structgroups)
         # keep refining while not at limit and are still grouping structs
-        startungrouped = 0
-        endungrouped = 1
         while len(ungrouped) > finishlen and startungrouped != endungrouped:
-            startungrouped = len(ungrouped)
+            startungrouped = len(structgroups)
             reference, nonreference = build_reference(ungrouped, finishlen)
             structgroups, reference = group_denovo(structgroups, reference, foresterscore)
             structgroups, ungrouped = group_to_reference(structgroups, reference, nonreference, foresterscore)
-            endungrouped = len(ungrouped)
+            endungrouped = len(structgroups)
         #end while
         structgroups, reference = group_denovo(structgroups, ungrouped, foresterscore)
         return structgroups
@@ -321,7 +329,6 @@ if __name__ == "__main__":
     clusters = {}
     secs = time()
     if exists(otufolder + "clusters.txt"):
-        print "sequences previously clustered"
         clustersin = open(otufolder + "clusters.txt")
         currclust = ""
         for header, seq in MinimalFastaParser(clustersin):
@@ -330,6 +337,7 @@ if __name__ == "__main__":
                 clusters[currclust] = []
             else:
                 clusters[currclust].append((header, seq))
+        print "sequences previously clustered,", len(clusters), "clusters"
     else:
         print "Running uclust over sequences"
         #cluster the initial sequences by sequence simmilarity
@@ -410,15 +418,21 @@ if __name__ == "__main__":
             #create a dictionary of just the structures in the group, then pass to grouping func
             groupinfo = {struct: structgroups[struct] for struct in groups_shape[shapegroup]}
             pool.apply_async(func=group_by_forester, args=(groupinfo, foresterscore), callback=hold.update)
-            groupinfo = 0
+        #memory saving wipe of structgroups, groups_shape, and groupinfo
+        groups_shape.clear()
+        groups_shape = 0
+        groupinfo.clear()
+        groupinfo = 0
+        structgroups.clear()
+        structgroups = 0
         pool.close()
         pool.join()
         #hold should now be the combined dictionaries from all calls of group_by_forester, aka new structgroups
         #do one more grouping with all remaining structs regardless of shape
-        #structgroups = group_by_forester(hold, foresterscore)  
+        print len(hold), "groups before last grouping (", (time() - secs) / 60, "min)"
         structgroups = hold
-        hold = 0
-        
+        structgroups = group_by_forester(structgroups, foresterscore)  
+        hold = 0        
         #sort all structure sequences by count
         for struct in structgroups:
             structgroups[struct].sort(reverse=True, key=lambda count: int(count[0].split('_')[1]))
@@ -447,7 +461,6 @@ if __name__ == "__main__":
         pool.apply_async(func=run_fold_for_infernal, args=(groupnum, otufolder+"fasta_groups/" + group, otufolder, args.minseqs))
     pool.close()
     pool.join()
-    print "Runtime: " + str((time() - secs) / 3600) + " hrs"
 
     #get sequence counts for each group
     infernalorder = []
@@ -469,6 +482,8 @@ if __name__ == "__main__":
     groupsizefile.close()
 
     print count, "final groups"
+    print "Runtime: " + str((time() - secs) / 3600) + " hrs"
+
     print "==Running Infernal for all groups=="
     print "Infernal score cutoff: " + str(infernalscore)
     #create the csv file for holding all the hit counts
@@ -479,6 +494,8 @@ if __name__ == "__main__":
     ihits.write("\n")
     ihits.close()
     #loop over each group and run infernal on it for all rounds
+    inftime = 0.0
+    secs = time()
     for groupinfo in infernalorder:
         group = groupinfo[0]
         if group == "fasta_groups":
@@ -529,7 +546,7 @@ if __name__ == "__main__":
             for r in roundhits:
                 hitscsv.write(r.split()[2] + ",")
             hitscsv.write("\n")
-            print group + "\tRuntime: " + str((time() - secs) / 60) + " min"
+            inftime += (time() - secs)
         else:
             print group + "\talready run"
             logfile = open(otufolder + group + "/log.txt")
@@ -541,4 +558,5 @@ if __name__ == "__main__":
             for r in roundhits:
                 hitscsv.write(r.split()[2] + ",")
             hitscsv.write("\n")
+    print "Runtime:", (time()-secs)/3600, " hrs   Average runtime: ", (inftime/count)/60, " mins"
     print "Program ended ", datetime.now(), "   Runtime: " + str((time() - starttime)/3600) + "h"

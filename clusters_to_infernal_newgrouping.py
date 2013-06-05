@@ -13,7 +13,7 @@ from multiprocessing import Pool, Manager
 import argparse
 from math import floor, ceil, log
 from random import shuffle
-from stutils import cluster_seqs
+from stutils import cluster_seqs, get_shape
 from bayeswrapper import bayesfold
 
 def fold_clusters(lock, cluster, seqs, otufolder):
@@ -166,6 +166,36 @@ def group_denovo(fulldict, keys, foresterscore):
     for pos in topop:
         keys.pop(pos)
     return fulldict, keys
+
+
+def group_by_forester(structgroups, foresterscore, specstructs=None):
+        '''Does initial grouping by way of de-novo reference creation and clustering
+            allstructs - dictionary with ALL structures and the sequences that fall in them
+            groupstructs - list of structures from allstructs that are being grouped
+        '''
+        #for speed, get 1% or 300, whichever is smaller
+        finishlen = len(structgroups) * 0.01
+        if finishlen > 300:
+            finishlen = 300
+        #do initial reg grab by either all structures or specific ones passed
+        if specstructs == None:
+            reference, nonreference = build_reference(structgroups.keys(), finishlen)
+        else:
+            reference, nonreference = build_reference(specstructs, finishlen)
+        structgroups, reference = group_denovo(structgroups, reference, foresterscore)
+        structgroups, ungrouped = group_to_reference(structgroups, reference, nonreference, foresterscore)
+        # keep refining while not at limit and are still grouping structs
+        startungrouped = 0
+        endungrouped = 1
+        while len(ungrouped) > finishlen and startungrouped != endungrouped:
+            startungrouped = len(ungrouped)
+            reference, nonreference = build_reference(ungrouped, finishlen)
+            structgroups, reference = group_denovo(structgroups, reference, foresterscore)
+            structgroups, ungrouped = group_to_reference(structgroups, reference, nonreference, foresterscore)
+            endungrouped = len(ungrouped)
+        #end while
+        structgroups, reference = group_denovo(structgroups, ungrouped, foresterscore)
+        return structgroups
 
 
 def make_r2r(insto, outfolder, group):
@@ -364,34 +394,31 @@ if __name__ == "__main__":
         skipiter = True
 
     if not skipiter:
-        print "RNAforester score threshold: " + str(foresterscore)
-        #Now need to iteratively refine the groups down
-        iteration = 0
-        secs = time()
-        #creating reference subset, then de-novo grouping the references.
-        #then group to those references. Should speed things up significantly. 
+        print "Abstract shape assignment"
+        groups_shape = group_by_shape(structgroups.keys())
+        print len(groups_shape), "shape groups"
+    
         print "start: " + str(len(structgroups)) + " initial groups"
-        finishlen = len(structgroups) * 0.01
-        reference, nonreference = build_reference(structgroups.keys(), finishlen)
-        print len(reference), "KEYS!", str((time() - secs) / 60), " min"
-        structgroups, reference = group_denovo(structgroups, reference, foresterscore)
-        print len(reference), "GROUPED REF!", str((time() - secs) / 3600), " hrs"
-        structgroups, ungrouped = group_to_reference(structgroups, reference, nonreference, foresterscore)
-        print len(ungrouped), "UNGROUPED!", str((time() - secs) / 3600), " hrs"
-        # keep refining while not at limit and are still grouping structs
-        startungrouped = 0
-        endungrouped = 1
-        while len(ungrouped) > finishlen and startungrouped != endungrouped:
-            startungrouped = len(ungrouped)
-            iteration += 1
-            print "iteration " + str(iteration) + ": " + str(len(structgroups)) + " initial groups"
-            reference, nonreference = build_reference(ungrouped, finishlen)
-            structgroups, reference = group_denovo(structgroups, reference, foresterscore)
-            structgroups, ungrouped = group_to_reference(structgroups, reference, nonreference, foresterscore)
-            print len(ungrouped), "UNGROUPED"
-            endungrouped = len(ungrouped)
-        #end while
-        structgroups, reference = group_denovo(structgroups, ungrouped, foresterscore)
+        #initial clustering by structures generated in first folding, broken out by shapes
+        #no comparison needed if not same shape, as most likely not going to group anyway
+        #make a pool of workers, one for each cpu available
+        manager = Manager()
+        hold = {}
+        pool = Pool(processes=args.c)
+        #run the pool over all shape groups to get final grouped structgroups
+        for shapegroup in groups_shape:
+            #create a dictionary of just the structures in the group, then pass to grouping func
+            groupinfo = {struct: structgroups[struct] for struct in groups_shape[shapegroup]}
+            pool.apply_async(func=group_by_forester, args=(groupinfo, foresterscore), callback=hold.update)
+            groupinfo = 0
+        pool.close()
+        pool.join()
+        #hold should now be the combined dictionaries from all calls of group_by_forester, aka new structgroups
+        #do one more grouping with all remaining structs regardless of shape
+        #structgroups = group_by_forester(hold, foresterscore)  
+        structgroups = hold
+        hold = 0
+        
         #sort all structure sequences by count
         for struct in structgroups:
             structgroups[struct].sort(reverse=True, key=lambda count: int(count[0].split('_')[1]))
@@ -514,4 +541,4 @@ if __name__ == "__main__":
             for r in roundhits:
                 hitscsv.write(r.split()[2] + ",")
             hitscsv.write("\n")
-print "Program ended ", datetime.now(), "   Runtime: " + str((time() - starttime)/3600) + "h"
+    print "Program ended ", datetime.now(), "   Runtime: " + str((time() - starttime)/3600) + "h"

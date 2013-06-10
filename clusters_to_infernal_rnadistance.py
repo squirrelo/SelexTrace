@@ -271,8 +271,8 @@ if __name__ == "__main__":
     (Default 0.99)")
     parser.add_argument('--minseqs', type=int, default=100, help="Minimum number of sequences for \
     groups to be significant (Default 100)")
-    parser.add_argument('--rsc', type=float, default=40, help="Score cutoff for RNAdistance \
-    (Default 40)")
+    parser.add_argument('--rsc', type=float, default=50, help="Score cutoff for RNAdistance \
+    (Default 50)")
     parser.add_argument('--isc', type=float, default=0.0, help="Score cutoff for infernal.\
     (Default 0.0)")
     parser.add_argument('-c', type=int, default=1, help="Number of CPUs to use \
@@ -290,9 +290,6 @@ if __name__ == "__main__":
         exit(1)
     if args.sim < 0.0 or args.sim > 1.0:
         print "ERROR: Infernal score cutoff must be greater than 0!"
-        exit(1)
-    if args.iter < 1:
-        print "ERROR: Must have at least one iteration!"
         exit(1)
 
     structscore = args.rsc
@@ -317,7 +314,6 @@ if __name__ == "__main__":
                     "Selection round:\t\t", str(args.r), "\n",
                     "Uclust simmilarity:\t\t", str(args.sim), "\n",
                     "Min seqs for group:\t\t", str(args.minseqs), "\n",
-                    "Iterations for grouping:", str(args.iter), "\n",
                     "RNAdistance min score:\t", str(args.rsc), "\n",
                     "Infernal min score:\t\t", str(args.isc), "\n",
                     "CPUs:\t\t\t\t\t", str(args.c), "\n"]))

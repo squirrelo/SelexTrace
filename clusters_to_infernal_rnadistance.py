@@ -20,7 +20,7 @@ def fold_clusters(lock, cluster, seqs, otufolder):
     '''Function for multithreading.
     Computes structure for a cluster and writes it to file'''
     try:
-        aln, struct = bayesfold(seqs)
+        aln, struct = bayesfold(seqs, params={"-diags": True})
         #write structure out to file
         lock.acquire()
         cfo = open(otufolder + "cluster_structs.fasta", 'a')
@@ -55,19 +55,6 @@ def group_by_shape(structs):
     return fams
 
 
-def fold_groups(seqs, struct, hold, numkept=None):
-    '''Function for multithreading.
-    Recomputes structure for a group'''
-    try:
-        aln, currstruct = bayesfold(seqs)
-        if currstruct == "":
-            currstruct = struct
-        hold[currstruct] = structgroups[struct]
-    except Exception, e:
-        print str(e)
-        stdout.flush()
-
-
 def run_fold_for_infernal(currgroup, groupfasta, basefolder, minseqs=1):
     '''Function for multithreading. Creates the final BayesFold alignment and 
     writes to files, then r2r struct'''
@@ -87,7 +74,8 @@ def run_fold_for_infernal(currgroup, groupfasta, basefolder, minseqs=1):
         if count < minseqs:
             return ""
         #run BayesFold on sequences in the group
-        aln, struct = bayesfold(seqs)
+        #maxiters set to 2 because should have huge amount of sequences for some groups
+        aln, struct = bayesfold(seqs, params={"-diags": True, "-maxiters": 2})
         #create output folder for group
         mkdir(currotufolder)
         out += str(aln.getNumSeqs()) + " unique sequences\n"
@@ -271,8 +259,8 @@ if __name__ == "__main__":
     (Default 0.99)")
     parser.add_argument('--minseqs', type=int, default=100, help="Minimum number of sequences for \
     groups to be significant (Default 100)")
-    parser.add_argument('--rsc', type=float, default=50, help="Score cutoff for RNAdistance \
-    (Default 50)")
+    parser.add_argument('--rsc', type=float, default=40, help="Score cutoff for RNAdistance \
+    (Default 40)")
     parser.add_argument('--isc', type=float, default=0.0, help="Score cutoff for infernal.\
     (Default 0.0)")
     parser.add_argument('-c', type=int, default=1, help="Number of CPUs to use \
@@ -314,7 +302,7 @@ if __name__ == "__main__":
                     "Selection round:\t\t", str(args.r), "\n",
                     "Uclust simmilarity:\t\t", str(args.sim), "\n",
                     "Min seqs for group:\t\t", str(args.minseqs), "\n",
-                    "RNAdistance min score:\t", str(args.rsc), "\n",
+                    "RNAdistance score cutoff:\t", str(args.rsc), "\n",
                     "Infernal min score:\t\t", str(args.isc), "\n",
                     "CPUs:\t\t\t\t\t", str(args.c), "\n"]))
     infofile.close()
@@ -422,14 +410,13 @@ if __name__ == "__main__":
         pool.join()
         #hold should now be the combined dictionaries from all calls of group_by_forester, aka new structgroups
         #do one more grouping with all remaining structs regardless of shape
-        print len(hold), "groups before last grouping (", (time() - secs) / 60, "min)"
         structgroups = hold
         structgroups = group_by_forester(structgroups, structscore)  
         hold = 0        
         #sort all structure sequences by count
         for struct in structgroups:
             structgroups[struct].sort(reverse=True, key=lambda count: int(count[0].split('_')[1]))
-        print str(len(structgroups)) + " final groups (" + str((time() - secs) / 3600) + " hrs)"
+        print str(len(structgroups)) + " end groups (" + str((time() - secs) / 60) + " min)"
 
         #write out fasta files for groups: header of each sequence in the group
         mkdir(otufolder+"fasta_groups")
@@ -447,7 +434,7 @@ if __name__ == "__main__":
 
     print "==Creating CM and r2r structures=="
     secs = time()
-    pool = Pool(processes=int(ceil(args.c/2)))
+    pool = Pool(processes=args.c)
     #run the pool over all groups to get structures
     for group in walk(otufolder + "fasta_groups").next()[2]:
         groupnum = group.split("_")[-1].split(".")[0]

@@ -71,6 +71,8 @@ def run_fold_for_infernal(currgroup, groupfasta, basefolder, minseqs=1):
             seqs.append((header.split()[0] + "_" + header.split("_")[1], seq))
             count += int(header.split("_")[1])
         out += "\n" + str(count) + " sequences\n"
+        print "group " + str(currgroup) + ": " + str(count) + " sequences"
+        stdout.flush()
         if count < minseqs:
             return ""
         #run BayesFold on sequences in the group
@@ -434,7 +436,7 @@ if __name__ == "__main__":
 
     print "==Creating CM and r2r structures=="
     secs = time()
-    pool = Pool(processes=args.c)
+    pool = Pool(processes=2)
     #run the pool over all groups to get structures
     for group in walk(otufolder + "fasta_groups").next()[2]:
         groupnum = group.split("_")[-1].split(".")[0]

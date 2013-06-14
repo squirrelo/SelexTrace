@@ -37,22 +37,23 @@ def fold_clusters(lock, cluster, seqs, otufolder):
         lock.release()
 
 
-def group_by_shape(structs):
-    fams = {}
-    for struct in structs:
+def group_by_shape(shapedict, struct):
+    try:
         famed = False
         #convert to shape
         gshape = get_shape(struct)
-        for secshape in fams:
+        for famshape in shapedict.keys():
             #loop over all previously found shapes, see if it fits
-            if gshape == secshape:
-                fams[gshape].append(struct)
+            if gshape == famshape:
+                shapedict[gshape] += [struct]
                 famed = True
                 break
         #if not fitted, create new group for this shape
         if not famed:
-            fams[gshape] = [struct]
-    return fams
+            shapedict[gshape] = [struct]
+    except Exception, e:
+        print "ERROR:", str(e)
+        stdout.flush()
 
 
 def run_fold_for_infernal(currgroup, groupfasta, basefolder, minseqs=1):
@@ -395,8 +396,16 @@ if __name__ == "__main__":
 
     if not skipiter:
         print "Abstract shape assignment"
-        groups_shape = group_by_shape(structgroups.keys())
-        print len(groups_shape), "shape groups"
+        secs = time()
+        manager = Manager()
+        groups_shape = manager.dict()
+        pool = Pool(processes=args.c)
+        #run the pool over all groups to get structures
+        for struct in structgroups:
+            pool.apply_async(func=group_by_shape, args=(groups_shape, struct))
+        pool.close()
+        pool.join()
+        print len(groups_shape), "shape groups (" + str((time() - secs) / 60) + " min)"
     
         print "start: " + str(len(structgroups)) + " initial groups"
         #initial clustering by structures generated in first folding, broken out by shapes
@@ -406,11 +415,14 @@ if __name__ == "__main__":
         hold = {}
         pool = Pool(processes=args.c)
         #run the pool over all shape groups to get final grouped structgroups
-        for shapegroup in groups_shape:
+        fout = open(otufolder + "shapesizes.txt", 'w')
+        for shapegroup in groups_shape.keys():
             #create a dictionary of just the structures in the group, then pass to grouping func
             groupinfo = {struct: structgroups[struct] for struct in groups_shape[shapegroup]}
+            fout.write(shapegroup + "\t" + str(len(groupinfo)) + "\n")
             pool.apply_async(func=group_by_forester, args=(groupinfo, structscore), callback=hold.update)
         #memory saving wipe of structgroups, groups_shape, and groupinfo
+        fout.close()
         groups_shape.clear()
         groups_shape = 0
         groupinfo.clear()
@@ -422,6 +434,7 @@ if __name__ == "__main__":
         #hold should now be the combined dictionaries from all calls of group_by_forester, aka new structgroups
         #do one more grouping with all remaining structs regardless of shape
         structgroups = hold
+        print str(len(structgroups)) + " before final (" + str((time() - secs) / 60) + " min)"
         structgroups = group_by_forester(structgroups, structscore)
         hold = 0
         #sort all structure sequences by count

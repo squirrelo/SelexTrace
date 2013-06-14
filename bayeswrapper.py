@@ -16,14 +16,14 @@ class BayesInputWrapper:
 
 
 def bayesfold(seqsin, temperature=37, params=None):
-    '''Takes in a list of unaligned tuples [(header, seq)] and returns
+    '''Takes in LoadSeqs readable sequence data and returns
     most likely structure from bayesfold'''
     seqs = LoadSeqs(data=seqsin, moltype=RNA, aligned=False)
     if params == None:
         params = {}
     aln = align_unaligned_seqs(seqs, RNA, params=params)
-    test = BayesInputWrapper(aln.getSeqNames(),
+    bayesinput = BayesInputWrapper(aln.getSeqNames(),
         map(str, aln.iterSeqs()), str(temperature))
-    bayescalc = BayesCalculation(test)
+    bayescalc = BayesCalculation(bayesinput)
     bayescalc.run()
     return aln, str(bayescalc.Alignment.Structures).split()[1]

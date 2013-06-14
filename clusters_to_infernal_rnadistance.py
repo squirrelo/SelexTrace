@@ -71,12 +71,15 @@ def run_fold_for_infernal(currgroup, groupfasta, basefolder, minseqs=1):
             seqs.append((header.split()[0] + "_" + header.split("_")[1], seq))
             count += int(header.split("_")[1])
         out += "\n" + str(count) + " sequences\n"
-        print "group " + str(currgroup) + ": " + str(count) + " sequences"
-        stdout.flush()
         if count < minseqs:
             return ""
+        print "group " + str(currgroup) + ":\t" + str(len(seqs)) + "\t" + str(count)
+        stdout.flush()
+        #hard limit of 3000 sequences to align and fold for memory reasons
+        if len(seqs) > 3000:
+            seqs = seqs[:3000]
         #run BayesFold on sequences in the group
-        #maxiters set to 2 because should have huge amount of sequences for some groups
+        #maxiters set to 3 because should have huge amount of sequences for some groups
         aln, struct = bayesfold(seqs, params={"-diags": True, "-maxiters": 2})
         #create output folder for group
         mkdir(currotufolder)
@@ -100,14 +103,17 @@ def run_fold_for_infernal(currgroup, groupfasta, basefolder, minseqs=1):
         print str(e)
         stdout.flush()
 
-
-def score_structures(struct1, struct2):
-    #return gigantically negative number if no structure for one struct
-    if "(" not in struct1 or "(" not in struct2:
-        raise ValueError(struct1 + "\n" + struct2 + "\nNo pairing in structs!")
-    p = Popen(["RNAdistance"], stdin=PIPE, stdout=PIPE)
-    p.stdin.write(''.join([struct1, "\n", struct2, "\n&"]))
-    return float(p.communicate()[0].strip().split(":")[1])  # /min(len(struct2), len(struct1))
+#object wrapper so create Popen object once: saves tons of overhead
+class ScoreStructures(object):
+    def __init__(self):
+        self.p = Popen(["RNAdistance"], stdin=PIPE, stdout=PIPE)
+    def __call__(self, struct1, struct2):
+        self.p.stdin.write(''.join([struct1, "\n", struct2,"\n"]))
+        self.p.stdin.flush()
+        self.p.stdout.flush()
+        return float(self.p.stdout.readline().strip().split(":")[1])  # /min(len(struct2), len(struct1))
+    def __del__(self):
+        self.p.terminate()
 
 
 def build_reference(dictkeys, refsize):
@@ -121,6 +127,7 @@ def build_reference(dictkeys, refsize):
 
 def group_to_reference(fulldict, reference, nonref, structscore):
     nogroup = []
+    score_structures = ScoreStructures()
     for currstruct in nonref:
         score = structscore
         bestref = ""
@@ -139,6 +146,7 @@ def group_to_reference(fulldict, reference, nonref, structscore):
 
 def group_denovo(fulldict, keys, structscore):
     topop = []
+    score_structures = ScoreStructures()
     for pos, currstruct in enumerate(keys):
         score = structscore
         bestref = ""
@@ -320,6 +328,7 @@ if __name__ == "__main__":
                 clusters[currclust] = []
             else:
                 clusters[currclust].append((header, seq))
+        clustersin.close()
         print "sequences previously clustered,", len(clusters), "clusters"
     else:
         print "Running uclust over sequences"
@@ -413,8 +422,8 @@ if __name__ == "__main__":
         #hold should now be the combined dictionaries from all calls of group_by_forester, aka new structgroups
         #do one more grouping with all remaining structs regardless of shape
         structgroups = hold
-        structgroups = group_by_forester(structgroups, structscore)  
-        hold = 0        
+        structgroups = group_by_forester(structgroups, structscore)
+        hold = 0
         #sort all structure sequences by count
         for struct in structgroups:
             structgroups[struct].sort(reverse=True, key=lambda count: int(count[0].split('_')[1]))
@@ -436,7 +445,7 @@ if __name__ == "__main__":
 
     print "==Creating CM and r2r structures=="
     secs = time()
-    pool = Pool(processes=2)
+    pool = Pool(processes=int(args.c/2))
     #run the pool over all groups to get structures
     for group in walk(otufolder + "fasta_groups").next()[2]:
         groupnum = group.split("_")[-1].split(".")[0]

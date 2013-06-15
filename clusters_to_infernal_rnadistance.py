@@ -113,8 +113,8 @@ class ScoreStructures(object):
         self.p.stdin.flush()
         self.p.stdout.flush()
         return float(self.p.stdout.readline().strip().split(":")[1])  # /min(len(struct2), len(struct1))
-    def __del__(self):
-        self.p.terminate()
+    #def __del__(self):
+    #    self.p.terminate()
 
 
 def build_reference(dictkeys, refsize):

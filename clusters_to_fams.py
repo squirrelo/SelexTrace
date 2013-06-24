@@ -13,7 +13,7 @@ from selextrace.stutils import cluster_seqs
 from selextrace.bayeswrapper import bayesfold
 from selextrace.ctilib import fold_clusters, group_by_shape, \
     run_fold_for_infernal, build_reference, group_to_reference, group_denovo, \
-    group_by_forester, make_r2r, run_infernal
+    group_by_forester, group_by_distance, make_r2r, run_infernal
 
 
 if __name__ == "__main__":
@@ -35,8 +35,10 @@ if __name__ == "__main__":
         help="Min number of seqs for group to be significant (Default 100)")
     parser.add_argument('--rsc', type=float, default=40, 
         help="Score cutoff for RNAdistance (Default 40)")
+    parser.add_argument('--fsc', type=int, default=200,
+        help="Score cutoff for RNAforester. (Default 200)")
     parser.add_argument('--isc', type=float, default=0.0,
-        help="Score cutoff for infernal. (Default 0.0)")
+        help="Score cutoff for Infernal. (Default 0.0)")
     parser.add_argument('-c', type=int, default=1,
         help="Number of CPUs to use (Default 1)")
 
@@ -47,8 +49,8 @@ if __name__ == "__main__":
     if args.c < 1:
         print "ERROR: CPU count must be at least 1!"
         exit(1)
-    if args.isc < 0.0:
-        print "ERROR: Infernal score cutoff must be greater than 0!"
+    if args.fsc < 0:
+        print "ERROR: RNAforester score cutoff must be greater than 0!"
         exit(1)
     if args.sim < 0.0 or args.sim > 1.0:
         print "ERROR: Infernal score cutoff must be greater than 0!"
@@ -186,7 +188,7 @@ if __name__ == "__main__":
             #create dictionary of structures in the group, then grouping func
             groupinfo = {struct: structgroups[struct] for struct in groups_shape[shapegroup]}
             fout.write(shapegroup + "\t" + str(len(groupinfo)) + "\n")
-            pool.apply_async(func=group_by_forester,
+            pool.apply_async(func=group_by_distance,
                 args=(groupinfo, structscore), callback=hold.update)
         #memory saving wipe of structgroups, groups_shape, and groupinfo
         fout.close()
@@ -200,9 +202,13 @@ if __name__ == "__main__":
         #group_by_forester, aka new structgroups
         #do one more grouping with all remaining structs regardless of shape
         structgroups = hold
-        print str(len(structgroups))+" first group ("+str((time()-secs)/60)+" min)"
-        structgroups = group_by_forester(structgroups, structscore)
-        hold = 0
+        hold = None
+        structgroups = group_by_distance(structgroups, structscore)
+        print str(len(structgroups))+" distance groups ("+str((time()-secs)/60)+" min)"
+
+        #Now group by forester local aignment to get larger families grouped
+        group_by_forester(structgropups, args.fsc)
+
         #sort all structure sequences by count
         for struct in structgroups:
             structgroups[struct].sort(reverse=True,
@@ -216,6 +222,7 @@ if __name__ == "__main__":
             for g in structgroups[group]:
                 gout.write(">%s\n%s\n" % g)
             gout.close()
+
     else:
         print "Previously grouped"
 

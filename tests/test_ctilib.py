@@ -3,7 +3,7 @@ from os import tmpfile, remove
 from multiprocessing import Manager, Pool
 from selextrace.ctilib import fold_clusters, group_by_shape, \
     run_fold_for_infernal, build_reference, group_to_reference, group_denovo, \
-    group_by_forester, make_r2r, run_infernal
+    score_local_rnaforester, group_by_forester, group_by_distance, make_r2r, run_infernal
 
 
 class MainTests(TestCase):
@@ -33,6 +33,15 @@ class MainTests(TestCase):
             "MISEQ:8:000000000-A18AY:1:1110:11594:5021_2":
             "GACUUCGGUCCAAGCUAAUGCACUCUGAUGAUCGCGUGGAUAUGGUACGCAUUGAAUUGUUGGGCACCGUAAAUGUCCUAACCCGGGGGCAU"}
         self.fastastruct = ".....((((((..((((((((...((....(((.....)))..))...))))))....))..)).))))....((((((......))))))."
+        self.testclusterslt10 = {
+            "(((...)))": [(1, 2), (3, 4)],
+            "((.....))": [(5, 6)],
+            ".....((((.......))))...": [(7, 8)],
+            "(((...)))...(((...)))": [(9, 10)],
+            "((((....))))": [(11, 12)],
+            '............': [(13, 14)],
+            '....((((((.......))))))....': [(15, 16)]
+        }
 
     def test_fold_clusters(self):
         cfo = open("cluster_structs.fasta", 'w')
@@ -82,24 +91,123 @@ class MainTests(TestCase):
                 raise AssertionError(shape + " not in observed!")
             self.assertEqual(obs[shape], exp[shape])
 
+    def test_build_reference_lengths(self):
+        items = [1, 2, 3, 4, 5, 6, 7, 8, 9, 0]
+        obs1, obs2 = build_reference(items, 3)
+        self.assertEqual(len(obs1), 3)
+        self.assertEqual(len(obs2), 7)
 
-    #def test_build_reference(self):
+    def test_build_reference_items(self):
+        items = [1, 2, 3, 4, 5, 6, 7, 8, 9, 0]
+        obs1, obs2 = build_reference(items, 3)
+        self.assertEqual(len(obs1), 3)
+        self.assertEqual(len(obs2), 7)
+        #check that the ref and nonref are same
+        for num in obs1:
+            if num not in items:
+                raise AssertionError(str(num) + " not in expected!")
+        for num in obs2:
+            if num not in items:
+                raise AssertionError(str(num) + " not in expected!")
+        for num in items:
+            if num not in obs1 and num not in obs2:
+                raise AssertionError(str(num) + " not in observed!")
+
+    def test_build_reference_dupes(self):
+        items = [1, 2, 3, 4, 5, 6, 7, 8, 9, 0]
+        obs1, obs2 = build_reference(items, 3)
+        self.assertEqual(len(obs1), 3)
+        self.assertEqual(len(obs2), 7)
+        #check that the ref and nonref are same
+        finals = set([])
+        for item in obs1:
+            if item in finals:
+                raise AssertionError("Duplicate in reference!")
+            finals.add(item)
+        for item in obs2:
+            if item in finals:
+                raise AssertionError("Duplicate in nonreference!")
+            finals.add(item)        
+
+    def test_group_to_reference(self):
+        testref = ["(((...)))"]
+        testnonref = ["((.....))",
+            ".....((((.......))))...",
+            "(((...)))...(((...)))",
+            "((((....))))",
+            '............',
+            '....((((((.......))))))....']
+        exp1 = {'(((...)))...(((...)))': [(9, 10)],
+        '(((...)))': [(1, 2), (3, 4), (5, 6), (11, 12)],
+        '.....((((.......))))...': [(7, 8)],
+        '............': [(13, 14)]}
+        exp2 = ['.....((((.......))))...', '(((...)))...(((...)))', '............']
+        obs1, obs2 = group_to_reference(self.testclusterslt10, testref, testnonref, 10)
+        self.assertEqual(obs1, exp1)
+        self.assertEqual(obs2, exp2)
+
+    def test_group_denovo_all(self):
+        obs1, obs2 = group_denovo(self.testclusterslt10, self.testclusterslt10.keys(), 10)
+        print "\n", obs1
+        print obs2
+        exp1 = {
+            '(((...)))...(((...)))': [(9, 10)],
+            '(((...)))': [(1, 2), (3, 4), (11, 12), (5, 6)],
+            '.....((((.......))))...': [(7, 8)],
+            '............': [(13, 14)]}
+        exp2 = ['.....((((.......))))...', '(((...)))...(((...)))', '(((...)))', '............']
+        self.assertEqual(obs1, exp1)
+        self.assertEqual(obs2, exp2)
+
+    def test_group_denovo_specific(self):
+        obs1, obs2 = group_denovo(self.testclusterslt10, ['.....((((.......))))...'], 10)
+        exp1 = {
+            '(((...)))...(((...)))': [(9, 10)],
+            '(((...)))': [(1, 2), (3, 4), (11, 12), (5, 6)],
+            '.....((((.......))))...': [(15, 16), (7, 8)],
+            '............': [(13, 14)]}
+        exp2 = ['.....((((.......))))...', '(((...)))...(((...)))', '(((...)))', '............']
+        self.assertEqual(obs1, exp1)
+        self.assertEqual(obs2, exp2)
 
 
-    #def test_group_to_reference(self):
+    def test_group_by_distance_all(self):
+        obs = group_by_distance(self.testclusterslt10, 10)
+        exp = {
+            '(((...)))...(((...)))': [(9, 10)],
+            '(((...)))': [(1, 2), (3, 4), (11, 12), (5, 6)],
+            '.....((((.......))))...': [(15, 16), (7, 8)],
+            '............': [(13, 14)]}
+        self.assertEqual(obs, exp)
+
+    def test_group_by_distance_lt10_specific_nogroup(self):
+        obs = group_by_distance(self.testclusterslt10, 10, ['.....((((.......))))...'])
+        exp = {
+            "(((...)))": [(1, 2), (3, 4)],
+            "((.....))": [(5, 6)],
+            ".....((((.......))))...": [(7, 8)],
+            "(((...)))...(((...)))": [(9, 10)],
+            "((((....))))": [(11, 12)],
+            '............': [(13, 14)]
+        }
+        self.assertEqual(obs, exp)
+
+    def test_group_by_distance_lt10_specific_group(self):
+        obs = group_by_distance(self.testclusterslt10, 15, specstructs=['(((...)))'])
+        print obs
+
+    def test_score_local_rnaforester(self):
+        struct1 = "....((.((.(((((((.((((((((....((...))(((((((...(((...((......))...))).))))))).....)))))).........))..))))).)).))))..."
+        struct2 = "(((....))).......(((((..(((((......(((((((...(((...(((....)))...))).)))))))...)))))))))).......(((((((....))))))).."
+        obs = score_local_rnaforester(struct1, struct2)
+        self.assertEqual(obs, 137)
 
 
-    #def test_group_denovo(self):
-
+    #def test_group_by_rnaforester(self):
 
     #def test_run_for_infernal(self):
 
-
-    #def test_group_by_forester(self):
-
-
     #def test_make_r2r(self):
-
 
     #def test_run_infernal(self):
 

@@ -96,17 +96,44 @@ def run_fold_for_infernal(currgroup, groupfasta, basefolder, minseqs=1):
         print str(e)
         stdout.flush()
 
-#object wrapper so create Popen object once: saves tons of overhead
+
+#object wrapper so create Popen object once: saves DAYS of overhead
 class ScoreStructures(object):
     def __init__(self):
         self.p = Popen(["RNAdistance"], stdin=PIPE, stdout=PIPE)
+
     def __call__(self, struct1, struct2):
-        self.p.stdin.write(''.join([struct1, "\n", struct2,"\n"]))
+        self.p.stdin.write(''.join([struct1, "\n", struct2, "\n"]))
         self.p.stdin.flush()
-        self.p.stdout.flush()
-        return float(self.p.stdout.readline().strip().split(":")[1])  # /min(len(struct2), len(struct1))
-    #def __del__(self):
-    #    self.p.terminate()
+        #self.p.stdout.flush()
+        return float(self.p.stdout.readline().strip().split(":")[1])
+
+    def __del__(self):
+        del self.p
+
+
+def score_local_rnaforester(struct1, struct2):
+    '''returns local aignment score of two structures'''
+    #return gigantically negative number if no structure for one struct
+    if "(" not in struct1 or "(" not in struct2:
+        raise ValueError(struct1 + "\n" + struct2 + "\nNo pairing in given structures!")
+    p = Popen(["RNAforester", "--score", "-r"], stdin=PIPE, stdout=PIPE)
+    p.stdin.write(''.join([struct1, "\n", struct2, "\n&"]))
+    return int(p.communicate()[0].split("\n")[-2])
+
+
+def group_by_forester(structgroups, foresterscore):
+    structs = structgroups.keys()
+    for pos, currstruct in enumerate(structs):  # for each structure
+        for teststruct in structgroups:  # compare it to all other structures
+            score = score_local_rnaforester(currstruct, teststruct)
+            if score > foresterscore:
+                #add matched groups clusters to found group
+                #then wipe current group
+                structgroups[teststruct].extend(structgroups[currstruct])
+                structgroups.pop(currstruct)
+                break
+    return structgroups
 
 
 def build_reference(dictkeys, refsize):
@@ -158,15 +185,21 @@ def group_denovo(fulldict, keys, structscore):
     return fulldict, keys
 
 
-def group_by_forester(structgroups, structscore, specstructs=None):
+def group_by_distance(structgroups, structscore, specstructs=None):
         '''Does grouping by way of de-novo reference creation and clustering
             structgroups - dictionary with ALL structures and the sequences that fall in them
             structscore - maximum score to consider grouping structures
             specstructs - a list of a subset of structures in structgroups to cluster
         '''
+        #fail if nothing to compare
+        if len(structgroups) < 1:
+            raise ValueError("Must have at least one structure to group!")
+        #return the list directly if only one item (useful for breakout work)
+        if len(structgroups) == 1:
+            return structgroups
         #just de-novo group if 10 or less to save time and effort
         if len(structgroups) <= 10:
-            if specstructs == None:
+            if specstructs is None:
                 structgroups, reference = group_denovo(structgroups, structgroups.keys(), structscore)
             else:
                 structgroups, reference = group_denovo(structgroups, specstructs, structscore)

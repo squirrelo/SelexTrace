@@ -117,23 +117,27 @@ def score_local_rnaforester(struct1, struct2):
     #return gigantically negative number if no structure for one struct
     if "(" not in struct1 or "(" not in struct2:
         raise ValueError(struct1 + "\n" + struct2 + "\nNo pairing in given structures!")
-    p = Popen(["RNAforester", "--score", "-r"], stdin=PIPE, stdout=PIPE)
+    p = Popen(["RNAforester", "--score", "-l"], stdin=PIPE, stdout=PIPE)
     p.stdin.write(''.join([struct1, "\n", struct2, "\n&"]))
     return int(p.communicate()[0].split("\n")[-2])
 
 
-def group_by_forester(structgroups, foresterscore):
-    structs = structgroups.keys()
+def group_by_forester(fulldict, foresterscore):
+    structs = fulldict.keys()
     for pos, currstruct in enumerate(structs):  # for each structure
-        for teststruct in structgroups:  # compare it to all other structures
-            score = score_local_rnaforester(currstruct, teststruct)
-            if score > foresterscore:
+        score = foresterscore
+        bestref = ""
+        for teststruct in structs[pos+1:]:  # compare it to all other structures
+            holdscore = score_local_rnaforester(currstruct, teststruct)
+            if holdscore >= score:
                 #add matched groups clusters to found group
                 #then wipe current group
-                structgroups[teststruct].extend(structgroups[currstruct])
-                structgroups.pop(currstruct)
-                break
-    return structgroups
+                score = holdscore
+                bestref = teststruct
+        if bestref != "":
+            fulldict[bestref].extend(fulldict[currstruct])
+            fulldict.pop(currstruct)
+    return fulldict
 
 
 def build_reference(dictkeys, refsize):
@@ -153,7 +157,7 @@ def group_to_reference(fulldict, reference, nonref, structscore):
         bestref = ""
         for teststruct in reference:
             holdscore = score_structures(currstruct, teststruct)
-            if holdscore < score:
+            if holdscore <= score:
                 score = holdscore
                 bestref = teststruct
         if bestref != "":
@@ -172,7 +176,7 @@ def group_denovo(fulldict, keys, structscore):
         bestref = ""
         for secpos in range(pos+1, len(keys)):
             holdscore = score_structures(currstruct, keys[secpos])
-            if holdscore < score:
+            if holdscore <= score:
                 score = holdscore
                 bestref = keys[secpos]
         if bestref != "":

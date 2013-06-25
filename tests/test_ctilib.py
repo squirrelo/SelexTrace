@@ -203,7 +203,9 @@ class MainTests(TestCase):
         self.assertEqual(obs, 137)
 
 
-    #def test_group_by_rnaforester(self):
+    def test_group_by_rnaforester(self):
+        obs = test_group_by_rnaforester(self.testclusterslt10, 200)
+        print obs
 
     #def test_run_for_infernal(self):
 

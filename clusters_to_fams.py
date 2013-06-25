@@ -207,7 +207,7 @@ if __name__ == "__main__":
         print str(len(structgroups))+" distance groups ("+str((time()-secs)/60)+" min)"
 
         #Now group by forester local aignment to get larger families grouped
-        group_by_forester(structgropups, args.fsc)
+        structgroups = group_by_forester(structgroups, args.fsc)
 
         #sort all structure sequences by count
         for struct in structgroups:

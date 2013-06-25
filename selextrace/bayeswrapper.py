@@ -16,14 +16,20 @@ class BayesInputWrapper:
 
 
 def bayesfold(seqsin, temperature=37, params=None):
-    '''Takes in LoadSeqs readable sequence data and returns
-    most likely structure from bayesfold'''
-    seqs = LoadSeqs(data=seqsin, moltype=RNA, aligned=False)
-    if params == None:
-        params = {}
-    aln = align_unaligned_seqs(seqs, RNA, params=params)
-    bayesinput = BayesInputWrapper(aln.getSeqNames(),
-        map(str, aln.iterSeqs()), str(temperature))
-    bayescalc = BayesCalculation(bayesinput)
-    bayescalc.run()
-    return aln, str(bayescalc.Alignment.Structures).split()[1]
+    '''Takes in sequence list in [(header, seq)] format and returns
+    most likely structure from bayesfold. Hard limit of 3000 seqs'''
+    try:
+        #hard limit of 3000 seqs
+        if len(seqsin) > 3000:
+            seqsin = seqsin[:3000]
+        seqs = LoadSeqs(data=seqsin, moltype=RNA, aligned=False)
+        if params == None:
+            params = {}
+        aln = align_unaligned_seqs(seqs, RNA, params=params)
+        bayesinput = BayesInputWrapper(aln.getSeqNames(),
+            map(str, aln.iterSeqs()), str(temperature))
+        bayescalc = BayesCalculation(bayesinput)
+        bayescalc.run()
+        return aln, str(bayescalc.Alignment.Structures).split()[1]
+    except Exception, e:
+        print "BAYESFOLD ERROR: ", e

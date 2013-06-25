@@ -30,6 +30,8 @@ def bayesfold(seqsin, temperature=37, params=None):
             map(str, aln.iterSeqs()), str(temperature))
         bayescalc = BayesCalculation(bayesinput)
         bayescalc.run()
-        return aln, str(bayescalc.Alignment.Structures).split()[1]
+        struct = str(bayescalc.Alignment.Structures).split()[1]
+        del bayescalc
+        return aln, struct
     except Exception, e:
         print "BAYESFOLD ERROR: ", e

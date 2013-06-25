@@ -11,7 +11,6 @@ from random import shuffle
 from bayeswrapper import bayesfold
 from selextrace.stutils import get_shape
 
-
 def fold_clusters(lock, cluster, seqs, otufolder):
     '''Function for multithreading.
     Computes structure for a cluster and writes it to file'''
@@ -66,7 +65,7 @@ def run_fold_for_infernal(currgroup, groupfasta, basefolder, minseqs=1):
         out += "\n" + str(count) + " sequences\n"
         if count < minseqs:
             return ""
-        print "group " + str(currgroup) + ":\t" + str(len(seqs)) + "\t" + str(count)
+        #print "group " + str(currgroup) + ":\t" + str(len(seqs)) + "\t" + str(count)
         stdout.flush()
         #hard limit of 3000 sequences to align and fold for memory reasons
         if len(seqs) > 3000:

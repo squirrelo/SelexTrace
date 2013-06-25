@@ -9,6 +9,7 @@ from datetime import datetime
 from multiprocessing import Pool, Manager
 import argparse
 from math import floor
+from gc import collect
 from selextrace.stutils import cluster_seqs
 from selextrace.bayeswrapper import bayesfold
 from selextrace.ctilib import fold_clusters, group_by_shape, \
@@ -238,7 +239,7 @@ if __name__ == "__main__":
     for group in walk(otufolder + "fasta_groups").next()[2]:
         groupnum = group.split("_")[-1].split(".")[0]
         pool.apply_async(func=run_fold_for_infernal,
-            args=(groupnum, otufolder+"fasta_groups/"+group, otufolder, args.minseqs))
+            args=(groupnum, otufolder+"fasta_groups/"+group, otufolder, args.minseqs), callback=collect())
     pool.close()
     pool.join()
 

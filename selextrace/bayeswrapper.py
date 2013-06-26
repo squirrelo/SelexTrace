@@ -17,11 +17,8 @@ class BayesInputWrapper:
 
 def bayesfold(seqsin, temperature=37, params=None):
     '''Takes in sequence list in [(header, seq)] format and returns
-    most likely structure from bayesfold. Hard limit of 3000 seqs'''
+    most likely structure from bayesfold.'''
     try:
-        #hard limit of 3000 seqs
-        if len(seqsin) > 3000:
-            seqsin = seqsin[:3000]
         seqs = LoadSeqs(data=seqsin, moltype=RNA, aligned=False)
         if params == None:
             params = {}

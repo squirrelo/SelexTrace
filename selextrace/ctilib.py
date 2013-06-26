@@ -47,55 +47,6 @@ def group_by_shape(shapedict, struct):
         stdout.flush()
 
 
-def run_fold_for_infernal(currgroup, groupfasta, basefolder, minseqs=1):
-    '''Function for multithreading. Creates the final BayesFold alignment and 
-    writes to files, then r2r struct'''
-    try:
-        #run locana-p on the superclusters to get alignment and structure
-        #skip if already run and program just crashed or whatever
-        currotufolder = basefolder + "group_" + str(currgroup)
-        if exists(currotufolder):
-            return ""
-        seqs = []
-        count = 0
-        out = "group " + str(currgroup) + ": "
-        for header, seq in MinimalFastaParser(open(groupfasta, 'rU')):
-            seqs.append((header.split()[0] + "_" + header.split("_")[1], seq))
-            count += int(header.split("_")[1])
-        out += "\n" + str(count) + " sequences\n"
-        if count < minseqs:
-            return ""
-        #print "group " + str(currgroup) + ":\t" + str(len(seqs)) + "\t" + str(count)
-        stdout.flush()
-        #hard limit of 3000 sequences to align and fold for memory reasons
-        if len(seqs) > 3000:
-            seqs = seqs[:3000]
-        #run BayesFold on sequences in the group
-        #maxiters set to 3 because should have huge amount of sequences for some groups
-        aln, struct = bayesfold(seqs, params={"-diags": True, "-maxiters": 2})
-        #create output folder for group
-        mkdir(currotufolder)
-        out += str(aln.getNumSeqs()) + " unique sequences\n"
-        out += "Structure: " + struct + "\n"
-        #write out alignment and structure in fasta and stockholm formats
-        #write that shit
-        logout = open(currotufolder + "/log.txt", 'w')
-        logout.write(out)
-        logout.close()
-        alnout = open(currotufolder + "/bayesfold-aln.fasta", 'w')
-        alnout.write(aln.toFasta() + "\n>SS_struct\n" + struct + "\n")
-        alnout.close()
-        alnout = open(currotufolder + "/bayesfold-aln.sto", 'w')
-        struct_dict = {'SS_cons': struct}
-        alnout.write(stockholm_from_alignment(aln, GC_annotation=struct_dict))
-        alnout.close()
-        #make R2R secondary structure for alignment
-        make_r2r(currotufolder + "/bayesfold-aln.sto", currotufolder, "group_" + str(currgroup))
-    except Exception, e:
-        print str(e)
-        stdout.flush()
-
-
 #object wrapper so create Popen object once: saves DAYS of overhead
 class ScoreStructures(object):
     def __init__(self):
@@ -108,7 +59,7 @@ class ScoreStructures(object):
         return float(self.p.stdout.readline().strip().split(":")[1])
 
     def __del__(self):
-        del self.p
+        self.p.terminate()
 
 
 def score_local_rnaforester(struct1, struct2):
@@ -230,6 +181,55 @@ def group_by_distance(structgroups, structscore, specstructs=None):
         #end while
         structgroups, reference = group_denovo(structgroups, ungrouped, structscore)
         return structgroups
+
+
+def run_fold_for_infernal(currgroup, groupfasta, basefolder, minseqs=1):
+    '''Function for multithreading. Creates the final BayesFold alignment and 
+    writes to files, then r2r struct'''
+    try:
+        #run locana-p on the superclusters to get alignment and structure
+        #skip if already run and program just crashed or whatever
+        currotufolder = basefolder + "group_" + str(currgroup)
+        if exists(currotufolder):
+            return ""
+        seqs = []
+        count = 0
+        out = "group " + str(currgroup) + ": "
+        for header, seq in MinimalFastaParser(open(groupfasta, 'rU')):
+            seqs.append((header.split()[0] + "_" + header.split("_")[1], seq))
+            count += int(header.split("_")[1])
+        out += "\n" + str(count) + " sequences\n"
+        if count < minseqs:
+            return ""
+        #print "group " + str(currgroup) + ":\t" + str(len(seqs)) + "\t" + str(count)
+        stdout.flush()
+        #hard limit of 3000 sequences to align and fold for memory reasons
+        if len(seqs) > 3000:
+            seqs = seqs[:3000]
+        #run BayesFold on sequences in the group
+        #maxiters set to 3 because should have huge amount of sequences for some groups
+        aln, struct = bayesfold(seqs, params={"-diags": True, "-maxiters": 2})
+        #create output folder for group
+        mkdir(currotufolder)
+        out += str(aln.getNumSeqs()) + " unique sequences\n"
+        out += "Structure: " + struct + "\n"
+        #write out alignment and structure in fasta and stockholm formats
+        #write that shit
+        logout = open(currotufolder + "/log.txt", 'w')
+        logout.write(out)
+        logout.close()
+        alnout = open(currotufolder + "/bayesfold-aln.fasta", 'w')
+        alnout.write(aln.toFasta() + "\n>SS_struct\n" + struct + "\n")
+        alnout.close()
+        alnout = open(currotufolder + "/bayesfold-aln.sto", 'w')
+        struct_dict = {'SS_cons': struct}
+        alnout.write(stockholm_from_alignment(aln, GC_annotation=struct_dict))
+        alnout.close()
+        #make R2R secondary structure for alignment
+        make_r2r(currotufolder + "/bayesfold-aln.sto", currotufolder, "group_" + str(currgroup))
+    except Exception, e:
+        print str(e)
+        stdout.flush()
 
 
 def make_r2r(insto, outfolder, group):

@@ -16,19 +16,19 @@ class BayesInputWrapper:
 
 
 def bayesfold(seqsin, temperature=37, params=None):
-    '''Takes in sequence list in [(header, seq)] format and returns
+    '''Takes in sequences in LoadSeqs readable format and returns
     most likely structure from bayesfold.'''
     try:
-        seqs = LoadSeqs(data=seqsin, moltype=RNA, aligned=False)
         if params == None:
             params = {}
-        aln = align_unaligned_seqs(seqs, RNA, params=params)
+        aln = align_unaligned_seqs(seqsin, RNA, params=params)
         bayesinput = BayesInputWrapper(aln.getSeqNames(),
             map(str, aln.iterSeqs()), str(temperature))
         bayescalc = BayesCalculation(bayesinput)
         bayescalc.run()
         struct = str(bayescalc.Alignment.Structures).split()[1]
         del bayescalc
+        del bayesinput
         return aln, struct
     except Exception, e:
         print "BAYESFOLD ERROR: ", e

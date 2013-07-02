@@ -4,6 +4,7 @@ from os import mkdir
 from cogent import LoadSeqs, RNA
 from cogent.app.infernal_v11 import cmsearch_from_file
 from cogent.parse.fasta import MinimalFastaParser
+from cogent.parse.rnaforester import cluster_parser
 from cogent.format.stockholm import stockholm_from_alignment
 from subprocess import Popen, PIPE
 from math import ceil
@@ -57,9 +58,8 @@ class ScoreStructures(object):
         self.p.stdin.flush()
         #self.p.stdout.flush()
         return float(self.p.stdout.readline().strip().split(":")[1])
-
-    def __del__(self):
-        self.p.terminate()
+    def end(self):
+        self.p.kill()
 
 
 def score_local_rnaforester(struct1, struct2):
@@ -73,20 +73,31 @@ def score_local_rnaforester(struct1, struct2):
 
 
 def group_by_forester(fulldict, foresterscore):
-    structs = fulldict.keys()
-    for pos, currstruct in enumerate(structs):  # for each structure
-        score = foresterscore
-        bestref = ""
-        for teststruct in structs[pos+1:]:  # compare it to all other structures
-            holdscore = score_local_rnaforester(currstruct, teststruct)
-            if holdscore >= score:
-                #add matched groups clusters to found group
-                #then wipe current group
-                score = holdscore
-                bestref = teststruct
-        if bestref != "":
-            fulldict[bestref].extend(fulldict[currstruct])
-            fulldict.pop(currstruct)
+    p = Popen(["RNAforester", "-m", "-l", "-mt=" + str(foresterscore),
+        "-mc=" + str(foresterscore)], stdin=PIPE, stdout=PIPE)
+    groupsinfo = p.communicate('\n'.join(fulldict.keys()) + "&")[0]
+    for group in cluster_parser(groupsinfo.split("\n")):
+        size = int(group[2].split(':')[1])
+        #load in the first chunk of the structures
+        startpos = (pos for pos, x in enumerate(group) if "(" in x).next()
+        localstructs = [group[startpos+x].split(None, 2)[2] for x in range(size)]
+        #now finish the structures if it is a multiline output
+        linenum = startpos + size + 2
+        while group[linenum] != '':
+            for x in range(size):
+                localstructs[x] += group[linenum + x].split(None, 2)[2]
+            linenum = linenum + size + 2
+        #match the local alignment structs to the full structures in fulldict
+        structs = []
+        for struct in localstructs:
+            struct = struct.replace("-", "")
+            structs.append((s for s in fulldict if struct in s).next())
+        print structs
+        kept = structs[0]
+        structs.pop(0)
+        for struct in structs:
+            fulldict[kept] = fulldict[struct]
+            fulldict.pop(struct)
     return fulldict
 
 
@@ -115,6 +126,7 @@ def group_to_reference(fulldict, reference, nonref, structscore):
             fulldict.pop(currstruct)
         else:
             nogroup.append(currstruct)
+    score_structures.end()
     return fulldict, nogroup
 
 
@@ -203,12 +215,12 @@ def run_fold_for_infernal(currgroup, groupfasta, basefolder, minseqs=1):
             return ""
         print "group " + str(currgroup) + ":\t" + str(len(seqs)) + "\t" + str(count)
         stdout.flush()
-        #hard limit of 3000 sequences to align and fold for memory reasons
-        if len(seqs) > 3000:
-            seqs = seqs[:3000]
+        #hard limit of 1500 sequences to align and fold for memory reasons
+        if len(seqs) > 500:
+            seqs = seqs[:500]
         #run BayesFold on sequences in the group
-        #maxiters set to 3 because should have huge amount of sequences for some groups
-        aln, struct = bayesfold(seqs, params={"-diags": True, "-maxiters": 2})
+        #maxiters set to 5 because should have huge amount of sequences for some groups
+        aln, struct = bayesfold(seqs, params={"-diags": True})
         #create output folder for group
         mkdir(currotufolder)
         out += str(aln.getNumSeqs()) + " unique sequences\n"

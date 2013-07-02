@@ -234,7 +234,8 @@ if __name__ == "__main__":
     print "==Creating CM and r2r structures=="
     secs = time()
     #smaller pool for memeory savings
-    pool = Pool(processes=int(args.c/2))
+    #NEED TO FIX BAYESFOLD ARRAY3D BEING A MEMORY HOG
+    pool = Pool(processes=args.c/2)
     #run the pool over all groups to get final structures
     for group in walk(otufolder + "fasta_groups").next()[2]:
         groupnum = group.split("_")[-1].split(".")[0]

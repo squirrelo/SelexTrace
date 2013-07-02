@@ -125,5 +125,5 @@ def remove_duplicates(seqsin):
 
 def get_shape(struct):
     '''Converts a dot-bracket notation to abstract shape notation'''
-    p = Popen(["rnashapes", "-D", struct], stdout=PIPE)
+    p = Popen(["RNAshapes", "-D", struct], stdout=PIPE)
     return p.communicate()[0].strip()

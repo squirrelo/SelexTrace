@@ -194,9 +194,9 @@ if __name__ == "__main__":
         #memory saving wipe of structgroups, groups_shape, and groupinfo
         fout.close()
         groups_shape.clear()
-        groups_shape = 0
+        del groups_shape
         structgroups.clear()
-        structgroups = 0
+        del structgroups
         pool.close()
         pool.join()
         #hold should now be the combined dictionaries from all calls of
@@ -208,9 +208,9 @@ if __name__ == "__main__":
         print str(len(structgroups))+" distance groups ("+str((time()-secs)/60)+" min)"
 
         #Now group by forester local aignment to get larger families grouped
-        structgroups = group_by_forester(structgroups, args.fsc)
+        structgroups = group_by_forester(structgroups, args.fsc, args.c)
 
-        #sort all structure sequences by count
+        #sort all structure sequences by count, highest to lowest
         for struct in structgroups:
             structgroups[struct].sort(reverse=True,
                 key=lambda count: int(count[0].split('_')[1]))
@@ -229,7 +229,7 @@ if __name__ == "__main__":
 
     #wipe out structgroups dict to save memory
     structgroups.clear()
-    structgroups = 0
+    del structgroups
 
     print "==Creating CM and r2r structures=="
     secs = time()

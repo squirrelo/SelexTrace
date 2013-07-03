@@ -11,6 +11,7 @@ from math import ceil
 from random import shuffle
 from bayeswrapper import bayesfold
 from selextrace.stutils import get_shape
+from multiprocessing import Pool
 
 def fold_clusters(lock, cluster, seqs, otufolder):
     '''Function for multithreading.
@@ -72,32 +73,29 @@ def score_local_rnaforester(struct1, struct2):
     return int(p.communicate()[0].split("\n")[-2])
 
 
-def group_by_forester(fulldict, foresterscore):
-    p = Popen(["RNAforester", "-m", "-l", "-mt=" + str(foresterscore),
-        "-mc=" + str(foresterscore)], stdin=PIPE, stdout=PIPE)
-    groupsinfo = p.communicate('\n'.join(fulldict.keys()) + "&")[0]
-    for group in cluster_parser(groupsinfo.split("\n")):
-        size = int(group[2].split(':')[1])
-        #load in the first chunk of the structures
-        startpos = (pos for pos, x in enumerate(group) if "(" in x).next()
-        localstructs = [group[startpos+x].split(None, 2)[2] for x in range(size)]
-        #now finish the structures if it is a multiline output
-        linenum = startpos + size + 2
-        while group[linenum] != '':
-            for x in range(size):
-                localstructs[x] += group[linenum + x].split(None, 2)[2]
-            linenum = linenum + size + 2
-        #match the local alignment structs to the full structures in fulldict
-        structs = []
-        for struct in localstructs:
-            struct = struct.replace("-", "")
-            structs.append((s for s in fulldict if struct in s).next())
-        print structs
-        kept = structs[0]
-        structs.pop(0)
-        for struct in structs:
-            fulldict[kept] = fulldict[struct]
-            fulldict.pop(struct)
+def score_multi_forester(struct1, struct2):
+    '''helper function for multiprocessing'''
+    return (struct2, score_local_rnaforester(struct1, struct2))
+
+
+def group_by_forester(fulldict, foresterscore, cpus=1):
+    structs = fulldict.keys()
+    for pos, currstruct in enumerate(structs): # for each structure
+        scores = []
+        pool = Pool(processes=cpus)
+        #compare everything as fast as possible using multiprocessing
+        #comparisons end up as tuples of (struct, score) in scores list
+        for teststruct in structs[pos+1:]:
+            pool.apply_async(func=score_multi_forester,
+                args=(currstruct, teststruct), callback=scores.append)
+        pool.close()
+        pool.join()
+        #sort largest score to smallest score
+        scores.sort(reverse=True, key=lambda count: count[1])
+        #append to winning structure if above threshold
+        if scores != [] and scores[0][1] >= foresterscore:
+            fulldict[scores[0][0]].extend(fulldict[currstruct])
+            fulldict.pop(currstruct)
     return fulldict
 
 
@@ -110,7 +108,7 @@ def build_reference(dictkeys, refsize):
     return dictkeys[:refsize], dictkeys[refsize:]
 
 
-def group_to_reference(fulldict, reference, nonref, structscore):
+def group_to_reference(fulldict, reference, nonref, structscore, cpus = 1):
     nogroup = []
     score_structures = ScoreStructures()
     for currstruct in nonref:
@@ -148,6 +146,7 @@ def group_denovo(fulldict, keys, structscore):
     topop.sort(reverse=True)
     for pos in topop:
         keys.pop(pos)
+    score_structures.end()
     return fulldict, keys
 
 
@@ -215,7 +214,7 @@ def run_fold_for_infernal(currgroup, groupfasta, basefolder, minseqs=1):
             return ""
         print "group " + str(currgroup) + ":\t" + str(len(seqs)) + "\t" + str(count)
         stdout.flush()
-        #hard limit of 1500 sequences to align and fold for memory reasons
+        #hard limit of 500 sequences to align and fold for memory reasons
         if len(seqs) > 500:
             seqs = seqs[:500]
         #run BayesFold on sequences in the group

@@ -73,15 +73,16 @@ if __name__ == "__main__":
 
     #print out run info to a file
     infofile = open(otufolder + "runparams.txt", 'w')
-    infofile.write(''.join(["FASTA file:\t\t\t\t", args.i, "\n",
-                    "Base folder:\t\t\t", args.f, "\n",
-                    "Output folder:\t\t\t", args.o, "\n"
-                    "Selection round:\t\t", str(args.r), "\n",
-                    "Uclust simmilarity:\t\t", str(args.sim), "\n",
-                    "Min seqs for group:\t\t", str(args.minseqs), "\n",
+    infofile.write(''.join(["FASTA file:\t", args.i, "\n",
+                    "Base folder:\t", args.f, "\n",
+                    "Output folder:\t", args.o, "\n"
+                    "Selection round:\t", str(args.r), "\n",
+                    "Uclust simmilarity:\t", str(args.sim), "\n",
+                    "Min seqs for group:\t", str(args.minseqs), "\n",
                     "RNAdistance score cutoff:\t", str(args.rsc), "\n",
-                    "Infernal min score:\t\t", str(args.isc), "\n",
-                    "CPUs:\t\t\t\t\t", str(args.c), "\n"]))
+                    "RNAforester score cutoff:\t", str(args.fsc), "\n",
+                    "Infernal min score:\t", str(args.isc), "\n",
+                    "CPUs:\t", str(args.c), "\n"]))
     infofile.close()
     print "==Clustering sequences by primary sequence=="
     clusters = {}

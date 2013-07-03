@@ -180,7 +180,6 @@ if __name__ == "__main__":
         #initial clustering by structures generated in first folding,
         #broken out by shapes. No comparison needed at first if not same shape,
         #as most likely not simmilar enough
-        manager = Manager()
         hold = {}
         pool = Pool(processes=args.c)
         #run the pool over all shape groups to get final grouped structgroups

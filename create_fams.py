@@ -40,19 +40,19 @@ if __name__ == "__main__":
     for group in walk(argv[1]).next()[1]:
         if group == "fasta_groups":
             continue
-        groupseqs = []
         filein = open(argv[1] + "/" + group + "/bayesfold-aln.fasta")
         for header, seq in MinimalFastaParser(filein):
             if "(" in seq:
-                groups[seq] = groupseqs
-            else:
-                groupseqs.append((header, seq))
+                groups[seq] = [group]
         filein.close()
     secs = time()
 
     print len(groups), "starting groups"
 
-    groupsend = group_by_forester(groups, 200, 16)
-
-    print len(groupsend), "ending groups"
+    groups = group_by_forester(groups, 200, 16)
+    print len(groups), "ending groups"
     print (time() - secs)/60, "mins"
+    fout = open(argv[1] + "families.txt", 'w')
+    for fam in groups:
+        fout.write("\t".join(groups[fam]) + "\n")
+    fout.close()

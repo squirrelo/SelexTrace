@@ -4,7 +4,6 @@ from os import mkdir
 from cogent import LoadSeqs, RNA
 from cogent.app.infernal_v11 import cmsearch_from_file
 from cogent.parse.fasta import MinimalFastaParser
-from cogent.parse.rnaforester import cluster_parser
 from cogent.format.stockholm import stockholm_from_alignment
 from subprocess import Popen, PIPE
 from math import ceil
@@ -73,29 +72,34 @@ def score_local_rnaforester(struct1, struct2):
     return int(p.communicate()[0].split("\n")[-2])
 
 
-def score_multi_forester(struct1, struct2):
-    '''helper function for multiprocessing'''
-    return (struct2, score_local_rnaforester(struct1, struct2))
-
+def score_multi_forester(basestruct, checkstruct, foresterscore):
+    if score_local_rnaforester(basestruct, checkstruct) > foresterscore:
+        return checkstruct
+    else:
+        return ""
 
 def group_by_forester(fulldict, foresterscore, cpus=1):
     structs = fulldict.keys()
     for pos, currstruct in enumerate(structs): # for each structure
-        scores = []
+        #skip if already grouped
+        if currstruct not in fulldict:
+            continue
+        scores = set([])
         pool = Pool(processes=cpus)
         #compare everything as fast as possible using multiprocessing
-        #comparisons end up as tuples of (struct, score) in scores list
+        #comparisons end up as set of structs above threshold plus ""
         for teststruct in structs[pos+1:]:
             pool.apply_async(func=score_multi_forester,
-                args=(currstruct, teststruct), callback=scores.append)
+                args=(currstruct, teststruct, foresterscore), callback=scores.add)
         pool.close()
         pool.join()
-        #sort largest score to smallest score
-        scores.sort(reverse=True, key=lambda count: count[1])
-        #append to winning structure if above threshold
-        if scores != [] and scores[0][1] >= foresterscore:
-            fulldict[scores[0][0]].extend(fulldict[currstruct])
-            fulldict.pop(currstruct)
+        #remove empty and add remaining structs to currgroup
+        if "" in scores:
+            scores.discard("")
+        for struct in scores:
+            if struct in fulldict:
+                fulldict[currstruct].extend(fulldict[struct])
+                fulldict.pop(struct)
     return fulldict
 
 

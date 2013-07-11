@@ -205,10 +205,6 @@ if __name__ == "__main__":
         structgroups = hold
         hold = None
         structgroups = group_by_distance(structgroups, structscore)
-        print str(len(structgroups))+" distance groups ("+str((time()-secs)/60)+" min)"
-
-        #Now group by forester local aignment to get larger families grouped
-        structgroups = group_by_forester(structgroups, args.fsc, args.c)
 
         #sort all structure sequences by count, highest to lowest
         for struct in structgroups:
@@ -246,16 +242,24 @@ if __name__ == "__main__":
 
     #get sequence counts for each group
     infernalorder = []
+    groups = {}
     count = 0
     for group in walk(otufolder).next()[1]:
         if group == "fasta_groups":
             continue
         count += 1
+        #read in group sequence counts
         log = open(otufolder + group + "/log.txt")
         loginfo = log.readlines()
         log.close()
         infernalorder.append((group, int(loginfo[1].split()[0]),
             int(loginfo[2].split()[0])))
+        #read in group structure and build dict for families creation
+        structin = open(otufolder + group + "/bayesfold-aln.fasta")
+        struct = structin.read().split("\n")[-2].strip()
+        structin.close()
+        groups[struct] = [group]
+
     #write out file of sequence counts
     infernalorder.sort(reverse=True, key=lambda x: x[1])
     groupsizefile = open(otufolder + "/group_sizes.txt", 'w')
@@ -266,6 +270,20 @@ if __name__ == "__main__":
 
     print count, "final groups"
     print "Runtime: " + str((time() - secs) / 3600) + " hrs"
+
+    print "==Creating families from groups=="
+    print "RNAforester score cutoff:", args.fsc
+    print len(groups), "initial groups"
+    #Now group by forester local aignment to get larger families grouped
+    groups = group_by_forester(groups, args.fsc, args.c)
+    fout = open(otufolder + "families.txt", 'w')
+    for fam in groups:
+        fout.write("\t".join(groups[fam]) + "\n")
+    fout.close()
+    print len(groups), "final groups"
+    print "Runtime: " + str((time() - secs) / 3600) + " hrs"
+    groups.clear()
+    del groups
 
     print "==Running Infernal for all groups=="
     print "Infernal score cutoff: " + str(infernalscore)

@@ -5,6 +5,8 @@ from os import walk
 from time import time
 from multiprocessing import Pool
 
+#create_seqs.py /path/to/base/folder/ #forestercutoff #cpus 
+
 def score_multi_forester(basestruct, checkstruct, foresterscore):
     if score_local_rnaforester(basestruct, checkstruct) > foresterscore:
         return checkstruct
@@ -36,8 +38,11 @@ def group_by_forester(fulldict, foresterscore, cpus=1):
     return fulldict
 
 if __name__ == "__main__":
+    basefolder = argv[1]
+    if basefolder[-1] != "/":
+        basefolder += "/"
     groups = {}
-    for group in walk(argv[1]).next()[1]:
+    for group in walk(basefolder).next()[1]:
         if group == "fasta_groups":
             continue
         filein = open(argv[1] + "/" + group + "/bayesfold-aln.fasta")
@@ -49,10 +54,10 @@ if __name__ == "__main__":
 
     print len(groups), "starting groups"
 
-    groups = group_by_forester(groups, 200, 16)
+    groups = group_by_forester(groups, 200, int(argv[3]))
     print len(groups), "ending groups"
     print (time() - secs)/60, "mins"
-    fout = open(argv[1] + "families.txt", 'w')
+    fout = open(argv[1] + "families" + str(argv[2]) + ".txt", 'w')
     for fam in groups:
         fout.write("\t".join(groups[fam]) + "\n")
     fout.close()

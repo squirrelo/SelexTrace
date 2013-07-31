@@ -2,9 +2,12 @@ from sys import stdout
 from os.path import exists
 from os import mkdir
 from cogent import LoadSeqs, RNA
+from cogent.core.sequence import RnaSequence
 from cogent.app.infernal_v11 import cmsearch_from_file
 from cogent.parse.fasta import MinimalFastaParser
 from cogent.format.stockholm import stockholm_from_alignment
+from cogent.app.muscle_v38 import align_unaligned_seqs
+from cogent.align.align import classic_align_pairwise
 from subprocess import Popen, PIPE
 from math import ceil
 from random import shuffle
@@ -112,19 +115,49 @@ def build_reference(dictkeys, refsize):
     return dictkeys[:refsize], dictkeys[refsize:]
 
 
-def group_to_reference(fulldict, reference, nonref, structscore, cpus = 1):
+alnscores = {
+    ('A', 'A'): 10, ('A', 'U'): -10, ('U', 'U'): 10, ('U', 'A'): -10, 
+    ('C', 'A'): -10, ('C', 'U'): -10, ('G', 'G'): 10, ('U', 'C'): -10, 
+    ('G', 'A'): -10, ('G', 'U'): -10, ('A', 'G'): -10, ('C', 'G'): -10, 
+    ('C', 'C'): 10, ('U', 'G'): -10, ('G', 'C'): -10, ('A', 'C'): -10
+}
+
+def group_to_reference(fulldict, reference, nonref, structscore):
     nogroup = []
     score_structures = ScoreStructures()
     for currstruct in nonref:
-        score = structscore
+        strscore = structscore
+        seqscore = 0
         bestref = ""
+        #remove gaps from majority and set as seq1
+        seq = fulldict[currstruct].majorityConsensus()
+        seq1 = RnaSequence(''.join(seq).replace('-', ''))
         for teststruct in reference:
             holdscore = score_structures(currstruct, teststruct)
-            if holdscore <= score:
-                score = holdscore
-                bestref = teststruct
+            if holdscore <= strscore:
+                #remove gaps from majority and set as seq2
+                seq = fulldict[currstruct].majorityConsensus()
+                seq2 = RnaSequence(''.join(seq).replace('-', ''))
+                #compare alignment score. subtract so lower is still better
+                aln, alnscore = classic_align_pairwise(seq1, seq2, alnscores, -10, -10, False, return_score=True)
+                if alnscore > seqscore:
+                    strscore = holdscore
+                    seqscore = alnscore
+                    bestref = teststruct
         if bestref != "":
-            fulldict[bestref].extend(fulldict[currstruct])
+            if not fulldict[currstruct].getGappedSeq("refseq").isGapped():
+                fulldict[bestref].addFromReferenceAln(fulldict[currstruct])
+            elif not fulldict[bestref].getGappedSeq("refseq").isGapped():
+                fulldict[currstruct].addFromReferenceAln(fulldict[bestref])
+                fulldict[bestref] = fulldict[currstruct]
+            else:
+                #realign all sequences since both refseqs have gaps
+                #hacky but it works, need to fix later
+                fulldict[bestref].Names.remove("refseq")
+                combinedseqs = fulldict[bestref].degap().addSeqs(fulldict[currstruct].degap())
+                fulldict[bestref] = align_unaligned_seqs(combinedseqs, RNA)
+                fulldict[bestref].Names.remove("refseq")
+                fulldict[bestref].Names.insert(0, "refseq")
             fulldict.pop(currstruct)
         else:
             nogroup.append(currstruct)
@@ -136,15 +169,38 @@ def group_denovo(fulldict, keys, structscore):
     topop = []
     score_structures = ScoreStructures()
     for pos, currstruct in enumerate(keys):
-        score = structscore
+        strscore = structscore
+        seqscore = 0
         bestref = ""
+        #remove gaps from majority and set as seq1
+        seq = fulldict[currstruct].majorityConsensus()
+        seq1 = RnaSequence(''.join(seq).replace('-', ''))
         for secpos in range(pos+1, len(keys)):
             holdscore = score_structures(currstruct, keys[secpos])
-            if holdscore <= score:
-                score = holdscore
-                bestref = keys[secpos]
+            if holdscore <= strscore:
+                #remove gaps from majority and set as seq2
+                seq = fulldict[currstruct].majorityConsensus()
+                seq2 = RnaSequence(''.join(seq).replace('-', ''))
+                #compare alignment score. Higher is better.
+                aln, alnscore = classic_align_pairwise(seq1, seq2, alnscores, -10, -10, False, return_score=True)
+                if alnscore > seqscore:
+                    strscore = holdscore
+                    seqscore = alnscore
+                    bestref = keys[secpos]
         if bestref != "":
-            fulldict[bestref].extend(fulldict[currstruct])
+            if not fulldict[currstruct].getGappedSeq("refseq").isGapped():
+                fulldict[bestref].addFromReferenceAln(fulldict[currstruct])
+            elif not fulldict[bestref].getGappedSeq("refseq").isGapped():
+                fulldict[currstruct].addFromReferenceAln(fulldict[bestref])
+                fulldict[bestref] = fulldict[currstruct]
+            else:
+                #realign all sequences since both refseqs have gaps
+                #hacky but it works, need to fix later
+                fulldict[bestref].Names.remove("refseq")
+                combinedseqs = fulldict[bestref].degap().addSeqs(fulldict[currstruct].degap())
+                fulldict[bestref] = align_unaligned_seqs(combinedseqs, RNA)
+                fulldict[bestref].Names.remove("refseq")
+                fulldict[bestref].Names.insert(0, "refseq")
             fulldict.pop(currstruct)
             topop.append(pos)
     topop.sort(reverse=True)
@@ -156,9 +212,11 @@ def group_denovo(fulldict, keys, structscore):
 
 def group_by_distance(structgroups, structscore, specstructs=None):
         '''Does grouping by way of de-novo reference creation and clustering
-            structgroups - dictionary with ALL structures and the sequences that fall in them
+            structgroups - dictionary with ALL structures and the Alignment
+                           object keyed to them
             structscore - maximum score to consider grouping structures
-            specstructs - a list of a subset of structures in structgroups to cluster
+            specstructs - a list of a subset of structures in structgroups
+                          to cluster (optional)
         '''
         #fail if nothing to compare
         if len(structgroups) < 1:
@@ -216,7 +274,6 @@ def run_fold_for_infernal(currgroup, groupfasta, basefolder, minseqs=1):
         out += "\n" + str(count) + " sequences\n"
         if count < minseqs:
             return ""
-        print "group " + str(currgroup) + ":\t" + str(len(seqs)) + "\t" + str(count)
         stdout.flush()
         #hard limit of 500 sequences to align and fold for memory reasons
         if len(seqs) > 500:

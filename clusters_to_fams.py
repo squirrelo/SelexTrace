@@ -1,16 +1,16 @@
 from sys import stdout
 from os.path import exists
 from os import mkdir, walk
-from cogent import LoadSeqs, RNA
+from cogent.app.muscle_v38 import align_unaligned_seqs
 from cogent.app.infernal_v11 import cmbuild_from_file, calibrate_file
 from cogent.parse.fasta import MinimalFastaParser
+from cogent import LoadSeqs, RNA
 from time import time
 from datetime import datetime
 from multiprocessing import Pool, Manager
 import argparse
 from math import floor
-from gc import collect
-from selextrace.stutils import cluster_seqs
+from selextrace.stutils import cluster_seqs, write_fasta_list
 from selextrace.bayeswrapper import bayesfold
 from selextrace.ctilib import fold_clusters, group_by_shape, \
     run_fold_for_infernal, build_reference, group_to_reference, group_denovo, \
@@ -69,11 +69,13 @@ if __name__ == "__main__":
     if not exists(otufolder):
         mkdir(otufolder)
 
-    print "Program started ", datetime.now()
+    date = str(datetime.now())
+    print "Program started ", date
 
     #print out run info to a file
     infofile = open(otufolder + "runparams.txt", 'w')
-    infofile.write(''.join(["FASTA file:\t", args.i, "\n",
+    infofile.write(''.join(["Program started ", date, "\n",
+                    "FASTA file:\t", args.i, "\n",
                     "Base folder:\t", args.f, "\n",
                     "Output folder:\t", args.o, "\n"
                     "Selection round:\t", str(args.r), "\n",
@@ -97,7 +99,7 @@ if __name__ == "__main__":
             else:
                 clusters[currclust].append((header, seq))
         clustersin.close()
-        print "sequences previously clustered,", len(clusters), "clusters"
+        print "Sequences previously clustered,", len(clusters), "clusters"
     else:
         print "Running uclust over sequences"
         #cluster the initial sequences by sequence simmilarity
@@ -155,6 +157,48 @@ if __name__ == "__main__":
     if count != len(clusters):
         raise AssertionError(str(count) + " structures, " + str(len(clusters))
             + " clusters. Not all clusters folded!")
+    else:
+        print "Clusters previously folded"
+
+    clusters.clear()
+    del clusters
+    if not exists(otufolder + "clusters_aln.fasta"):
+        startaln = time()
+        #add refseq and align all sequences for later seq/struct comparisons
+        refin = open(args.f + "refseq.fasta")
+        crap, refseq = MinimalFastaParser(refin).next()
+        refin.close()
+        for struct in structgroups:
+            structgroups[struct].append(("refseq", refseq))
+            structgroups[struct] = align_unaligned_seqs(structgroups[struct], RNA)
+            #hacky way to make sure refseq first, will need to fix later
+            structgroups[struct].Names.remove("refseq")
+            structgroups[struct].Names.insert(0, "refseq")
+        #write that shit to a file to save time if rerun needed
+        cout = open(otufolder + "clusters_aln.fasta", 'w')
+        for struct in structgroups:
+            cout.write(">%s\n%s\n" % ("newcluster", struct))
+            cout.write(structgroups[struct].toFasta() + "\n")
+        cout.close()
+        print "Aligned all clusters: " + str((time() - startaln)/60) + " min"
+    else:
+        cin = open(otufolder + "clusters_aln.fasta")
+        currclust = []
+        currstruct = ""
+        structgroups = {}
+        first = True
+        for header, seq in MinimalFastaParser(cin):
+            if "cluster" in header:
+                if not first:
+                    structgroups[currstruct] = LoadSeqs(data=currclust, moltype=RNA, aligned=True)
+                    structgroups[currstruct].Names.remove("refseq")
+                    structgroups[currstruct].Names.insert(0, "refseq")
+                first = False
+                currstruct = seq
+                currclust = []
+            else:
+                currclust.append((header, seq))
+        print "Clusters previously aligned"
 
     print "Runtime: " + str((time() - secs)/60) + " min"
     print "==Grouping clusters by secondary structure=="
@@ -186,39 +230,40 @@ if __name__ == "__main__":
         #run the pool over all shape groups to get final grouped structgroups
         fout = open(otufolder + "shapesizes.txt", 'w')
         for shapegroup in groups_shape.keys():
-            #create dictionary of structures in the group, then grouping func
+            #create dict of structs in the group, then call grouping func on it
             groupinfo = {struct: structgroups[struct] for struct in groups_shape[shapegroup]}
             fout.write(shapegroup + "\t" + str(len(groupinfo)) + "\n")
             pool.apply_async(func=group_by_distance,
                 args=(groupinfo, structscore), callback=hold.update)
-        #memory saving wipe of structgroups, groups_shape, and groupinfo
+            #hold.update(group_by_distance(groupinfo, structscore))
         fout.close()
-        groups_shape.clear()
-        del groups_shape
-        structgroups.clear()
-        del structgroups
         pool.close()
         pool.join()
+        #memory saving wipe of structgroups, groups_shape, and groupinfo
+        groups_shape.clear()
+        del groups_shape
+        groupinfo.clear()
+        del groupinfo
+        structgroups.clear()
+        del structgroups
         #hold should now be the combined dictionaries from all calls of
         #group_by_forester, aka new structgroups
         #do one more grouping with all remaining structs regardless of shape
-        structgroups = hold
-        hold = None
+        structgroups = dict(hold)
+        del hold
         structgroups = group_by_distance(structgroups, structscore)
 
         #sort all structure sequences by count, highest to lowest
         for struct in structgroups:
-            structgroups[struct].sort(reverse=True,
-                key=lambda count: int(count[0].split('_')[1]))
+            structgroups[struct].Names.remove('refseq')
+            structgroups[struct].Names.sort(reverse=True,
+                key=lambda count: int(count.split('_')[1]))
         print str(len(structgroups))+" end groups ("+str((time()-secs)/60)+" min)"
 
         #write out fasta files for groups: header of each sequence in the group
         mkdir(otufolder+"fasta_groups")
         for num, group in enumerate(structgroups):
-            gout = open(otufolder+"fasta_groups/group_"+str(num)+".fasta", 'w')
-            for g in structgroups[group]:
-                gout.write(">%s\n%s\n" % g)
-            gout.close()
+            structgroups[group].degap().writeToFile(otufolder+"fasta_groups/group_"+str(num)+".fasta", "fasta")
 
     else:
         print "Previously grouped"
@@ -230,13 +275,13 @@ if __name__ == "__main__":
     print "==Creating CM and r2r structures=="
     secs = time()
     #smaller pool for memeory savings
-    #NEED TO FIX BAYESFOLD ARRAY3D BEING A MEMORY HOG
-    pool = Pool(processes=args.c/2)
+    #NEED TO FIX BAYESFOLD ARRAY2D BEING A MEMORY HOG
+    pool = Pool(processes=int(args.c/2))
     #run the pool over all groups to get final structures
     for group in walk(otufolder + "fasta_groups").next()[2]:
         groupnum = group.split("_")[-1].split(".")[0]
         pool.apply_async(func=run_fold_for_infernal,
-            args=(groupnum, otufolder+"fasta_groups/"+group, otufolder, args.minseqs), callback=collect())
+        args=(groupnum, otufolder+"fasta_groups/"+group, otufolder, args.minseqs))
     pool.close()
     pool.join()
 

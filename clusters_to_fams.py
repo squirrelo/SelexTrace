@@ -13,9 +13,8 @@ from math import floor
 from selextrace.stutils import cluster_seqs, write_fasta_list
 from selextrace.bayeswrapper import bayesfold
 from selextrace.ctilib import fold_clusters, group_by_shape, \
-    run_fold_for_infernal, build_reference, group_to_reference, group_denovo, \
-    group_by_forester, group_by_distance, make_r2r, run_infernal
-
+    run_fold_for_infernal, group_by_forester, group_by_distance,\
+    make_r2r, run_infernal
 
 if __name__ == "__main__":
     starttime = time()
@@ -226,19 +225,20 @@ if __name__ == "__main__":
         #broken out by shapes. No comparison needed at first if not same shape,
         #as most likely not simmilar enough
         hold = {}
-        pool = Pool(processes=args.c)
+        #pool = Pool(processes=args.c)
         #run the pool over all shape groups to get final grouped structgroups
         fout = open(otufolder + "shapesizes.txt", 'w')
         for shapegroup in groups_shape.keys():
             #create dict of structs in the group, then call grouping func on it
             groupinfo = {struct: structgroups[struct] for struct in groups_shape[shapegroup]}
             fout.write(shapegroup + "\t" + str(len(groupinfo)) + "\n")
-            pool.apply_async(func=group_by_distance,
-                args=(groupinfo, structscore), callback=hold.update)
-            #hold.update(group_by_distance(groupinfo, structscore))
+            #pool.apply_async(func=group_by_distance,
+            #    args=(groupinfo, structscore), callback=hold.update)
+            print len(groupinfo), "clusters"
+            stime = time()
+            hold.update(group_by_distance(groupinfo, structscore))
+            print "Grouped ("+str((time()-stime)/60)+" min)"
         fout.close()
-        pool.close()
-        pool.join()
         #memory saving wipe of structgroups, groups_shape, and groupinfo
         groups_shape.clear()
         del groups_shape
@@ -246,12 +246,17 @@ if __name__ == "__main__":
         del groupinfo
         structgroups.clear()
         del structgroups
+        #pool.close()
+        #pool.join()
         #hold should now be the combined dictionaries from all calls of
         #group_by_forester, aka new structgroups
         #do one more grouping with all remaining structs regardless of shape
         structgroups = dict(hold)
         del hold
-        structgroups = group_by_distance(structgroups, structscore)
+        #print len(structgroups), "clusters fgrouping"
+        #stime = time()
+        #structgroups = group_by_distance(structgroups, structscore)
+        #print "Grouped ("+str((time()-stime)/60)+" min)"
 
         #sort all structure sequences by count, highest to lowest
         for struct in structgroups:
@@ -274,9 +279,9 @@ if __name__ == "__main__":
 
     print "==Creating CM and r2r structures=="
     secs = time()
-    #smaller pool for memeory savings
+    #smaller pool for memeory savings, 1 task per child to try and gc each run
     #NEED TO FIX BAYESFOLD ARRAY2D BEING A MEMORY HOG
-    pool = Pool(processes=int(args.c/2))
+    pool = Pool(processes=int(args.c/2), maxtasksperchild=1)
     #run the pool over all groups to get final structures
     for group in walk(otufolder + "fasta_groups").next()[2]:
         groupnum = group.split("_")[-1].split(".")[0]

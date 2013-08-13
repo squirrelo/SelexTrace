@@ -1,15 +1,14 @@
-from strip_primers import strip_primer
 from os.path import exists
 from os import mkdir, walk
 from sys import exit
 from cogent.parse.fasta import MinimalFastaParser
 from cogent.parse.fastq import MinimalFastqParser
 from cogent import LoadSeqs
-from remove_duplicates import remove_duplicates
 from tempfile import mktemp
 from time import time
 import argparse
-from stutils import write_fasta_list, write_fasta_dict
+from selextrace.stutils import write_fasta_list, write_fasta_dict, strip_primer,\
+    remove_duplicates
 
 
 def rem_N_short(seqs, minlen=1):
@@ -29,15 +28,15 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Cleans sequences by removing 3' \
     primers, duplicate sequences, and sequences with ambiguous bases.")
     parser.add_argument('-i', required=True, help="Input folder")
-    parser.add_argument('-3p', default="", required=True, help="3' primer \
+    parser.add_argument('-ep', default="", required=True, help="3' primer \
     sequence to strip")
-    parser.add_argument('-5p', default="", help="5' primer \
+    parser.add_argument('-sp', default="", help="5' primer \
     sequence to strip")
     parser.add_argument('-o', default = "", help="Output folder (default same as input)")
     parser.add_argument('-l', default = 1, type=int, help="minimum length of \
     sequence to keep (default 1)")
-    parser.add_argument('-d', default = 2, type=int, help="minimum number of duplicates\
-    needed to keep (default 2)")
+    parser.add_argument('-d', default = 1, type=int, help="minimum number of duplicates\
+    needed to keep (default 1)")
     parser.add_argument('-q', action='store_true', default = False, help="Input is fastq format \
     (default fasta)")
 
@@ -63,8 +62,8 @@ if __name__ == "__main__":
     print "===================="
     print "Folder in: " + folderin
     print "Output Folder: " + folderout
-    print "3' primer: " + args.3p
-    print "3' primer: " + args.5p
+    print "3' primer: " + args.ep
+    print "5' primer: " + args.sp
     print "Min length: " + str(args.l)
     print "====================\n"
     for filein in walk(args.i).next()[2]:
@@ -94,12 +93,12 @@ if __name__ == "__main__":
 
         log = open(currfolder + "-cleanup.log", 'w')
         log.write("====================\nFile in: " + folderin + filein + "\nOutput Folder: " + currfolder + \
-        "\n3' primer: " + args.3p + "\nMin length: " + str(args.l) + "\nMin duplicates: " + str(args.d) + "\n====================\n")
+        "\n3' primer: " + args.ep + "\nMin length: " + str(args.l) + "\nMin duplicates: " + str(args.d) + "\n====================\n")
         #strip primers from sequences, print out not stripped to be safe
         #allowing up to 2 mismatches in the primer
         print "Primer stripping"
         secs = time()
-        kept, rem = strip_primer(filein, args.3p, maxmismatch=2, keep_primer=True)
+        kept, rem = strip_primer(folderin + filein, args.ep, maxmismatch=2, keep_primer=True)
         log.write("Primer stripping\n" + str(len(kept)) + " sequences left, " + \
         str(len(rem)) + " sequences removed")
         print str(len(kept)) + " sequences left, " + \

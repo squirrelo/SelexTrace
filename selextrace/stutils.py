@@ -29,21 +29,25 @@ def write_fasta_dict(dct, filename):
 def strip_primer(seqfile, primer, maxmismatch=0, keep_primer=False):
     '''strips 3 prime primer from sequences in fasta file and returns MinimalFastaParser
     formatted arrays for stripped and not stripped sequences'''
-    seqs = MinimalFastaParser(open(seqfile, 'rU'))
+    seqsin = open(seqfile, 'rU')
     nostripped = []
     stripped = []
-    for seq in seqs:
+    for head, seq in MinimalFastaParser(seqsin):
+        seq = seq.replace('U', 'T')
         #code adapted from truncate_reverse_primers.py in qiime
         rev_primer_mm, rev_primer_index =\
-            local_align_primer_seq(primer, seq[1])
+            local_align_primer_seq(primer, seq)
         if rev_primer_mm > maxmismatch:
             nostripped.append(seq)
         else:
-            seqnew = seq[1][:rev_primer_index]
             if keep_primer:
-                seqnew += primer
-            stripped.append((seq[0], seqnew))
+                seqnew = seq[:rev_primer_index + len(primer)]
+            else:
+                seqnew = seq[:rev_primer_index]
+            seqnew = seqnew.replace('T', 'U')
+            stripped.append((head, seqnew))
     #end for
+    seqsin.close()
     return stripped, nostripped
 
 

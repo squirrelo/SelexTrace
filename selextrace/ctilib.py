@@ -145,6 +145,8 @@ def group_to_reference(fulldict, reference, nonref, structscore):
                     seqscore = alnscore
                     bestref = teststruct
         if bestref != "":
+            #combine the two alignments into one alignment using reference sequence as guide
+            #refseq must be ungapped to do this without realigning, hence the checks
             if not fulldict[currstruct].getGappedSeq("refseq").isGapped():
                 fulldict[bestref].addFromReferenceAln(fulldict[currstruct])
             elif not fulldict[bestref].getGappedSeq("refseq").isGapped():
@@ -218,6 +220,7 @@ def group_by_distance(structgroups, structscore, specstructs=None):
             specstructs - a list of a subset of structures in structgroups
                           to cluster (optional)
         '''
+        stdout.flush()
         #fail if nothing to compare
         if len(structgroups) < 1:
             raise ValueError("Must have at least one structure to group!")

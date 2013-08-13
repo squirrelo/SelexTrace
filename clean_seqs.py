@@ -94,11 +94,17 @@ if __name__ == "__main__":
         log = open(currfolder + "-cleanup.log", 'w')
         log.write("====================\nFile in: " + folderin + filein + "\nOutput Folder: " + currfolder + \
         "\n3' primer: " + args.ep + "\nMin length: " + str(args.l) + "\nMin duplicates: " + str(args.d) + "\n====================\n")
+        #remove all underscores from headers during load for compatability reasons
+        seqs = []
+        seqsin = open(folderin + filein, 'rU')
+        for header, seq in MinimalFastaParser(seqsin):
+            seqs.append((header.replace('_', ''), seq))
         #strip primers from sequences, print out not stripped to be safe
         #allowing up to 2 mismatches in the primer
         print "Primer stripping"
         secs = time()
-        kept, rem = strip_primer(folderin + filein, args.ep, maxmismatch=2, keep_primer=True)
+        kept, rem = strip_primer(seqs, args.ep, maxmismatch=2, keep_primer=True)
+        del seqs
         log.write("Primer stripping\n" + str(len(kept)) + " sequences left, " + \
         str(len(rem)) + " sequences removed")
         print str(len(kept)) + " sequences left, " + \

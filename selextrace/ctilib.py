@@ -122,7 +122,7 @@ alnscores = {
     ('C', 'C'): 10, ('U', 'G'): -10, ('G', 'C'): -10, ('A', 'C'): -10
 }
 
-def group_to_reference(fulldict, reference, nonref, structscore):
+def group_to_reference(fulldict, reference, nonref, structscore, norefseq=False):
     nogroup = []
     score_structures = ScoreStructures()
     for currstruct in nonref:
@@ -136,10 +136,10 @@ def group_to_reference(fulldict, reference, nonref, structscore):
             holdscore = score_structures(currstruct, teststruct)
             if holdscore <= strscore:
                 #remove gaps from majority and set as seq2
-                seq = fulldict[currstruct].majorityConsensus()
+                seq = fulldict[teststruct].majorityConsensus()
                 seq2 = RnaSequence(''.join(seq).replace('-', ''))
                 #compare alignment score. subtract so lower is still better
-                aln, alnscore = classic_align_pairwise(seq1, seq2, alnscores, -10, -10, False, return_score=True)
+                aln, alnscore = classic_align_pairwise(seq1, seq2, alnscores, -10, -1, False, return_score=True)
                 if alnscore > seqscore:
                     strscore = holdscore
                     seqscore = alnscore
@@ -147,6 +147,12 @@ def group_to_reference(fulldict, reference, nonref, structscore):
         if bestref != "":
             #combine the two alignments into one alignment using reference sequence as guide
             #refseq must be ungapped to do this without realigning, hence the checks
+            if norefseq:
+                #realign all sequences since no refseq available
+                combinedseqs = fulldict[bestref].degap().addSeqs(fulldict[currstruct].degap())
+                fulldict[bestref] = align_unaligned_seqs(combinedseqs, RNA)
+                continue
+            #if one refseq is gapless, can easily combine them without realigning
             if not fulldict[currstruct].getGappedSeq("refseq").isGapped():
                 fulldict[bestref].addFromReferenceAln(fulldict[currstruct])
             elif not fulldict[bestref].getGappedSeq("refseq").isGapped():
@@ -167,7 +173,7 @@ def group_to_reference(fulldict, reference, nonref, structscore):
     return fulldict, nogroup
 
 
-def group_denovo(fulldict, keys, structscore):
+def group_denovo(fulldict, keys, structscore, norefseq=False):
     topop = []
     score_structures = ScoreStructures()
     for pos, currstruct in enumerate(keys):
@@ -181,15 +187,20 @@ def group_denovo(fulldict, keys, structscore):
             holdscore = score_structures(currstruct, keys[secpos])
             if holdscore <= strscore:
                 #remove gaps from majority and set as seq2
-                seq = fulldict[currstruct].majorityConsensus()
+                seq = fulldict[keys[secpos]].majorityConsensus()
                 seq2 = RnaSequence(''.join(seq).replace('-', ''))
                 #compare alignment score. Higher is better.
-                aln, alnscore = classic_align_pairwise(seq1, seq2, alnscores, -10, -10, False, return_score=True)
+                aln, alnscore = classic_align_pairwise(seq1, seq2, alnscores, -10, -1, False, return_score=True)
                 if alnscore > seqscore:
                     strscore = holdscore
                     seqscore = alnscore
                     bestref = keys[secpos]
         if bestref != "":
+            if norefseq:
+                #realign all sequences since no refseq available
+                combinedseqs = fulldict[bestref].degap().addSeqs(fulldict[currstruct].degap())
+                fulldict[bestref] = align_unaligned_seqs(combinedseqs, RNA)
+                continue
             if not fulldict[currstruct].getGappedSeq("refseq").isGapped():
                 fulldict[bestref].addFromReferenceAln(fulldict[currstruct])
             elif not fulldict[bestref].getGappedSeq("refseq").isGapped():
@@ -212,13 +223,14 @@ def group_denovo(fulldict, keys, structscore):
     return fulldict, keys
 
 
-def group_by_distance(structgroups, structscore, specstructs=None):
+def group_by_distance(structgroups, structscore, specstructs=None, norefseq=False):
         '''Does grouping by way of de-novo reference creation and clustering
             structgroups - dictionary with ALL structures and the Alignment
                            object keyed to them
             structscore - maximum score to consider grouping structures
             specstructs - a list of a subset of structures in structgroups
                           to cluster (optional)
+            norefseq - boolean indicating reference sequence is not in each alignment (default False)
         '''
         stdout.flush()
         #fail if nothing to compare
@@ -230,9 +242,9 @@ def group_by_distance(structgroups, structscore, specstructs=None):
         #just de-novo group if 10 or less to save time and effort
         if len(structgroups) <= 10:
             if specstructs is None:
-                structgroups, reference = group_denovo(structgroups, structgroups.keys(), structscore)
+                structgroups, reference = group_denovo(structgroups, structgroups.keys(), structscore, norefseq)
             else:
-                structgroups, reference = group_denovo(structgroups, specstructs, structscore)
+                structgroups, reference = group_denovo(structgroups, specstructs, structscore, norefseq)
             return structgroups
         #for speed, get 1% as initial clustering. need at least 10 structs though
         finishlen = int(ceil(len(structgroups) * 0.01))
@@ -244,18 +256,18 @@ def group_by_distance(structgroups, structscore, specstructs=None):
         else:
             reference, nonreference = build_reference(specstructs, finishlen)
         startungrouped = len(structgroups)
-        structgroups, reference = group_denovo(structgroups, reference, structscore)
-        structgroups, ungrouped = group_to_reference(structgroups, reference, nonreference, structscore)
+        structgroups, reference = group_denovo(structgroups, reference, structscore, norefseq)
+        structgroups, ungrouped = group_to_reference(structgroups, reference, nonreference, structscore, norefseq)
         endungrouped = len(structgroups)
         # keep refining while not at limit and are still grouping structs
         while len(ungrouped) > finishlen and startungrouped != endungrouped:
             startungrouped = len(structgroups)
             reference, nonreference = build_reference(ungrouped, finishlen)
-            structgroups, reference = group_denovo(structgroups, reference, structscore)
-            structgroups, ungrouped = group_to_reference(structgroups, reference, nonreference, structscore)
+            structgroups, reference = group_denovo(structgroups, reference, structscore, norefseq)
+            structgroups, ungrouped = group_to_reference(structgroups, reference, nonreference, structscore, norefseq)
             endungrouped = len(structgroups)
         #end while
-        structgroups, reference = group_denovo(structgroups, ungrouped, structscore)
+        structgroups, reference = group_denovo(structgroups, ungrouped, structscore, norefseq)
         return structgroups
 
 

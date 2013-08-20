@@ -33,8 +33,10 @@ if __name__ == "__main__":
         help="Simmilarity for uclust. (Default 0.99)")
     parser.add_argument('--minseqs', type=int, default=100,
         help="Min number of seqs for group to be significant (Default 100)")
-    parser.add_argument('--rsc', type=float, default=40, 
-        help="Score cutoff for RNAdistance (Default 40)")
+    parser.add_argument('--nr', action='store_true',
+        help="No reference sequence is available (used for totally random sequences)")
+    parser.add_argument('--rsc', type=float, default=25, 
+        help="Score cutoff for RNAdistance (Default 25)")
     parser.add_argument('--fsc', type=int, default=200,
         help="Score cutoff for RNAforester. (Default 200)")
     parser.add_argument('--isc', type=float, default=0.0,
@@ -163,16 +165,19 @@ if __name__ == "__main__":
     del clusters
     if not exists(otufolder + "clusters_aln.fasta"):
         startaln = time()
+        if not args.nr:
         #add refseq and align all sequences for later seq/struct comparisons
-        refin = open(args.f + "refseq.fasta")
-        crap, refseq = MinimalFastaParser(refin).next()
-        refin.close()
+            refin = open(args.f + "refseq.fasta")
+            crap, refseq = MinimalFastaParser(refin).next()
+            refin.close()
         for struct in structgroups:
-            structgroups[struct].append(("refseq", refseq))
+            if not args.nr:
+                structgroups[struct].append(("refseq", refseq))
             structgroups[struct] = align_unaligned_seqs(structgroups[struct], RNA)
-            #hacky way to make sure refseq first, will need to fix later
-            structgroups[struct].Names.remove("refseq")
-            structgroups[struct].Names.insert(0, "refseq")
+            if not args.nr:
+                #hacky way to make sure refseq first, will need to fix later
+                structgroups[struct].Names.remove("refseq")
+                structgroups[struct].Names.insert(0, "refseq")
         #write that shit to a file to save time if rerun needed
         cout = open(otufolder + "clusters_aln.fasta", 'w')
         for struct in structgroups:
@@ -190,8 +195,9 @@ if __name__ == "__main__":
             if "cluster" in header:
                 if not first:
                     structgroups[currstruct] = LoadSeqs(data=currclust, moltype=RNA, aligned=True)
-                    structgroups[currstruct].Names.remove("refseq")
-                    structgroups[currstruct].Names.insert(0, "refseq")
+                    if not args.nr:
+                        structgroups[currstruct].Names.remove("refseq")
+                        structgroups[currstruct].Names.insert(0, "refseq")
                 first = False
                 currstruct = seq
                 currclust = []
@@ -236,7 +242,7 @@ if __name__ == "__main__":
             #    args=(groupinfo, structscore), callback=hold.update)
             print len(groupinfo), "clusters"
             stime = time()
-            hold.update(group_by_distance(groupinfo, structscore))
+            hold.update(group_by_distance(groupinfo, structscore, norefseq=args.nr))
             print "Grouped ("+str((time()-stime)/60)+" min)"
         fout.close()
         #memory saving wipe of structgroups, groups_shape, and groupinfo
@@ -253,10 +259,10 @@ if __name__ == "__main__":
         #do one more grouping with all remaining structs regardless of shape
         structgroups = dict(hold)
         del hold
-        #print len(structgroups), "clusters fgrouping"
-        #stime = time()
-        #structgroups = group_by_distance(structgroups, structscore)
-        #print "Grouped ("+str((time()-stime)/60)+" min)"
+        print len(structgroups), "clusters fgrouping"
+        stime = time()
+        structgroups = group_by_distance(structgroups, structscore, norefseq=args.nr)
+        print "Grouped ("+str((time()-stime)/60)+" min)"
 
         #sort all structure sequences by count, highest to lowest
         for struct in structgroups:

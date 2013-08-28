@@ -1,6 +1,6 @@
 from sys import stdout
 from os.path import exists
-from os import mkdir, walk
+from os import mkdir, walk, remove
 from cogent.app.muscle_v38 import align_unaligned_seqs
 from cogent.app.infernal_v11 import cmbuild_from_file, calibrate_file
 from cogent.parse.fasta import MinimalFastaParser
@@ -230,30 +230,38 @@ if __name__ == "__main__":
         #initial clustering by structures generated in first folding,
         #broken out by shapes. No comparison needed at first if not same shape,
         #as most likely not simmilar enough
+        files = []
         hold = {}
-        #pool = Pool(processes=args.c)
+        pool = Pool(processes=args.c)
         #run the pool over all shape groups to get final grouped structgroups
         fout = open(otufolder + "shapesizes.txt", 'w')
+        groupnum = 1
         for shapegroup in groups_shape.keys():
-            #create dict of structs in the group, then call grouping func on it
-            groupinfo = {struct: structgroups[struct] for struct in groups_shape[shapegroup]}
-            fout.write(shapegroup + "\t" + str(len(groupinfo)) + "\n")
+            #write out each group to file for use in subprocess
+            fname = "/tmp/group" + str(groupnum) + ".fasta"
+            groupinfo = open(fname, 'w')
+            files.append(fname)
+            for struct in groups_shape[shapegroup]:
+                groupinfo.write(">%s\n%s\n" % ("newaln", struct))
+                groupinfo.write(structgroups[struct].toFasta() + "\n")
+            groupinfo.close()
+            groupnum += 1
+            #fout.write(shapegroup + "\t" + str(len(groupinfo)) + "\n")
             #pool.apply_async(func=group_by_distance,
-            #    args=(groupinfo, structscore, None, None, args.nr), callback=hold.update)
-            print len(groupinfo), "clusters"
-            stime = time()
-            hold.update(group_by_distance(groupinfo, structscore, norefseq=args.nr))
-            print "Grouped ("+str((time()-stime)/60)+" min)"
+            #    args=(fname, structscore, None, None, args.nr), callback=hold.update)
+            hold.update(group_by_distance(fname, structscore, None, None, args.nr))
         fout.close()
         #memory saving wipe of structgroups, groups_shape, and groupinfo
         groups_shape.clear()
         del groups_shape
-        #pool.close()
-        #pool.join()
-        groupinfo.clear()
-        del groupinfo
         structgroups.clear()
         del structgroups
+        pool.close()
+        pool.join()
+        #delete the temp files created for the clustering
+        for f in files:
+            remove(f)
+        del files
         #hold should now be the combined dictionaries from all calls of
         #group_by_forester, aka new structgroups
         #do one more grouping with all remaining structs regardless of shape

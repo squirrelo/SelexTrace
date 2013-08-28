@@ -134,7 +134,7 @@ def group_to_reference(fulldict, reference, nonref, structscore, norefseq=False)
         seq1 = RnaSequence(''.join(seq).replace('-', ''))
         for teststruct in reference:
             holdscore = score_structures(currstruct, teststruct)
-            if holdscore <= structscore:
+            if holdscore <= strscore:
                 #remove gaps from majority and set as seq2
                 seq = fulldict[teststruct].majorityConsensus()
                 seq2 = RnaSequence(''.join(seq).replace('-', ''))
@@ -185,7 +185,7 @@ def group_denovo(fulldict, keys, structscore, norefseq=False):
         seq1 = RnaSequence(''.join(seq).replace('-', ''))
         for secpos in range(pos+1, len(keys)):
             holdscore = score_structures(currstruct, keys[secpos])
-            if holdscore <= structscore:
+            if holdscore <= strscore:
                 #remove gaps from majority and set as seq2
                 seq = fulldict[keys[secpos]].majorityConsensus()
                 seq2 = RnaSequence(''.join(seq).replace('-', ''))
@@ -223,7 +223,7 @@ def group_denovo(fulldict, keys, structscore, norefseq=False):
     return fulldict, keys
 
 
-def group_by_distance(structgroups, structscore, specstructs=None, setfinishlen=None, norefseq=False):
+def group_by_distance(structgroupsfile, structscore, specstructs=None, setfinishlen=None, norefseq=False):
         '''Does grouping by way of de-novo reference creation and clustering
             structgroups - dictionary with ALL structures and the Alignment
                            object keyed to them
@@ -233,7 +233,29 @@ def group_by_distance(structgroups, structscore, specstructs=None, setfinishlen=
             setfinishlen - Allows manual number of reference structures (default 1%  of dict)
             norefseq - boolean indicating reference sequence is not in each alignment (default False)
         '''
-        stdout.flush()
+        #read in file info
+        fin = open(structgroupsfile, 'rU')
+        first = True
+        currstruct = ""
+        curraln = []
+        structgroups = {}
+        for head,seq in MinimalFastaParser(fin):
+            if first and head == "newaln":
+                first = False
+                currstruct = seq
+            elif head == "newaln":
+                structgroups[currstruct] = LoadSeqs(data=curraln, moltype=RNA)
+                structgroups[currstruct].Names.remove("refseq")
+                structgroups[currstruct].Names.insert(0, "refseq")
+                currstruct = seq
+                curraln = []
+            else:
+                curraln.append((head,seq))
+        structgroups[currstruct] = LoadSeqs(data=curraln, moltype=RNA)
+        structgroups[currstruct].Names.remove("refseq")
+        structgroups[currstruct].Names.insert(0, "refseq")
+        fin.close()
+
         #fail if nothing to compare
         if len(structgroups) < 1:
             raise ValueError("Must have at least one structure to group!")

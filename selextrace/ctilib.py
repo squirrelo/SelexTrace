@@ -223,7 +223,7 @@ def group_denovo(fulldict, keys, structscore, norefseq=False):
     return fulldict, keys
 
 
-def group_by_distance(structgroupsfile, structscore, specstructs=None, setfinishlen=None, norefseq=False):
+def group_by_distance(structgroups, structscore, specstructs=None, setfinishlen=None, norefseq=False):
         '''Does grouping by way of de-novo reference creation and clustering
             structgroups - dictionary with ALL structures and the Alignment
                            object keyed to them
@@ -234,28 +234,6 @@ def group_by_distance(structgroupsfile, structscore, specstructs=None, setfinish
             norefseq - boolean indicating reference sequence is not in each alignment (default False)
         '''
         #read in file info
-        fin = open(structgroupsfile, 'rU')
-        first = True
-        currstruct = ""
-        curraln = []
-        structgroups = {}
-        for head,seq in MinimalFastaParser(fin):
-            if first and head == "newaln":
-                first = False
-                currstruct = seq
-            elif head == "newaln":
-                structgroups[currstruct] = LoadSeqs(data=curraln, moltype=RNA)
-                structgroups[currstruct].Names.remove("refseq")
-                structgroups[currstruct].Names.insert(0, "refseq")
-                currstruct = seq
-                curraln = []
-            else:
-                curraln.append((head,seq))
-        structgroups[currstruct] = LoadSeqs(data=curraln, moltype=RNA)
-        structgroups[currstruct].Names.remove("refseq")
-        structgroups[currstruct].Names.insert(0, "refseq")
-        fin.close()
-
         #fail if nothing to compare
         if len(structgroups) < 1:
             raise ValueError("Must have at least one structure to group!")

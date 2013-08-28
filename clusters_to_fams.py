@@ -232,36 +232,29 @@ if __name__ == "__main__":
         #as most likely not simmilar enough
         files = []
         hold = {}
-        pool = Pool(processes=args.c)
+        #pool = Pool(processes=args.c)
         #run the pool over all shape groups to get final grouped structgroups
         fout = open(otufolder + "shapesizes.txt", 'w')
         groupnum = 1
         for shapegroup in groups_shape.keys():
             #write out each group to file for use in subprocess
-            fname = "/tmp/group" + str(groupnum) + ".fasta"
-            groupinfo = open(fname, 'w')
-            files.append(fname)
-            for struct in groups_shape[shapegroup]:
-                groupinfo.write(">%s\n%s\n" % ("newaln", struct))
-                groupinfo.write(structgroups[struct].toFasta() + "\n")
-            groupinfo.close()
-            groupnum += 1
+            groupinfo = {struct: structgroups[struct] for struct in groups_shape[shapegroup]}
             #fout.write(shapegroup + "\t" + str(len(groupinfo)) + "\n")
             #pool.apply_async(func=group_by_distance,
-            #    args=(fname, structscore, None, None, args.nr), callback=hold.update)
-            hold.update(group_by_distance(fname, structscore, None, None, args.nr))
+            #    args=(groupinfo, structscore, None, None, args.nr), callback=hold.update)
+            stime = time()
+            hold.update(group_by_distance(groupinfo, structscore, None, None, args.nr))
+            print len(groupinfo), "clusters:", str((time()-stime)/60), "min"
         fout.close()
         #memory saving wipe of structgroups, groups_shape, and groupinfo
         groups_shape.clear()
         del groups_shape
+        groupinfo.clear()
+        del groupinfo
         structgroups.clear()
         del structgroups
-        pool.close()
-        pool.join()
-        #delete the temp files created for the clustering
-        for f in files:
-            remove(f)
-        del files
+        #pool.close()
+        #pool.join()
         #hold should now be the combined dictionaries from all calls of
         #group_by_forester, aka new structgroups
         #do one more grouping with all remaining structs regardless of shape

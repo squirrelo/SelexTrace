@@ -119,7 +119,7 @@ def remove_duplicates(seqsin):
         #get count for this seuqnce
         count = counts[unique]
         #append to header and add to return list
-        uniquesret.append((uniques[unique] + "_" + str(count), unique))
+        uniquesret.append((uniques[unique].replace("_", "") + "_" + str(count), unique))
     #sort by sequence count, highest to lowest
     uniquesret.sort(reverse=True, key=lambda item: int(item[0].split("_")[1]))
     return uniquesret, repseqs

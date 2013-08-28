@@ -239,7 +239,7 @@ if __name__ == "__main__":
             groupinfo = {struct: structgroups[struct] for struct in groups_shape[shapegroup]}
             fout.write(shapegroup + "\t" + str(len(groupinfo)) + "\n")
             #pool.apply_async(func=group_by_distance,
-            #    args=(groupinfo, structscore), callback=hold.update)
+            #    args=(groupinfo, structscore, None, None, args.nr), callback=hold.update)
             print len(groupinfo), "clusters"
             stime = time()
             hold.update(group_by_distance(groupinfo, structscore, norefseq=args.nr))
@@ -248,21 +248,21 @@ if __name__ == "__main__":
         #memory saving wipe of structgroups, groups_shape, and groupinfo
         groups_shape.clear()
         del groups_shape
+        #pool.close()
+        #pool.join()
         groupinfo.clear()
         del groupinfo
         structgroups.clear()
         del structgroups
-        #pool.close()
-        #pool.join()
         #hold should now be the combined dictionaries from all calls of
         #group_by_forester, aka new structgroups
         #do one more grouping with all remaining structs regardless of shape
+        #print len(hold), "clusters fgrouping"
+        #stime = time()
+        #structgroups = group_by_distance(hold, structscore, norefseq=args.nr)
+        #print "Grouped ("+str((time()-stime)/60)+" min)"
         structgroups = dict(hold)
         del hold
-        print len(structgroups), "clusters fgrouping"
-        stime = time()
-        structgroups = group_by_distance(structgroups, structscore, norefseq=args.nr)
-        print "Grouped ("+str((time()-stime)/60)+" min)"
 
         #sort all structure sequences by count, highest to lowest
         for struct in structgroups:

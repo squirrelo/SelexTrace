@@ -139,7 +139,7 @@ def group_to_reference(fulldict, reference, nonref, structscore, norefseq=False)
                 seq = fulldict[teststruct].majorityConsensus()
                 seq2 = RnaSequence(''.join(seq).replace('-', ''))
                 #compare alignment score. subtract so lower is still better
-                aln, alnscore = classic_align_pairwise(seq1, seq2, alnscores, -10, -1, False, return_score=True)
+                aln, alnscore = classic_align_pairwise(seq1, seq2, alnscores, -10, -10, False, return_score=True)
                 if alnscore > seqscore:
                     strscore = holdscore
                     seqscore = alnscore
@@ -190,7 +190,7 @@ def group_denovo(fulldict, keys, structscore, norefseq=False):
                 seq = fulldict[keys[secpos]].majorityConsensus()
                 seq2 = RnaSequence(''.join(seq).replace('-', ''))
                 #compare alignment score. Higher is better.
-                aln, alnscore = classic_align_pairwise(seq1, seq2, alnscores, -10, -1, False, return_score=True)
+                aln, alnscore = classic_align_pairwise(seq1, seq2, alnscores, -10, -10, False, return_score=True)
                 if alnscore > seqscore:
                     strscore = holdscore
                     seqscore = alnscore
@@ -223,16 +223,17 @@ def group_denovo(fulldict, keys, structscore, norefseq=False):
     return fulldict, keys
 
 
-def group_by_distance(structgroups, structscore, specstructs=None, norefseq=False):
+def group_by_distance(structgroups, structscore, specstructs=None, setfinishlen=None, norefseq=False):
         '''Does grouping by way of de-novo reference creation and clustering
             structgroups - dictionary with ALL structures and the Alignment
                            object keyed to them
             structscore - maximum score to consider grouping structures
             specstructs - a list of a subset of structures in structgroups
                           to cluster (optional)
+            setfinishlen - Allows manual number of reference structures (default 1%  of dict)
             norefseq - boolean indicating reference sequence is not in each alignment (default False)
         '''
-        stdout.flush()
+        #read in file info
         #fail if nothing to compare
         if len(structgroups) < 1:
             raise ValueError("Must have at least one structure to group!")
@@ -246,9 +247,12 @@ def group_by_distance(structgroups, structscore, specstructs=None, norefseq=Fals
             else:
                 structgroups, reference = group_denovo(structgroups, specstructs, structscore, norefseq)
             return structgroups
-        #for speed, get 1% as initial clustering. need at least 10 structs though
-        finishlen = int(ceil(len(structgroups) * 0.01))
-        if finishlen < 10:
+        #for speed, get 1% as initial clustering or user defined. need at least 10 structs though
+        if setfinishlen == "None":
+            finishlen = int(ceil(len(structgroups) * 0.01))
+        else:
+            finishlen = setfinishlen
+        if finishlen < 10 and len(structgroups) >= 10:
             finishlen = 10
         #do initial ref grab by either all structures or specific ones passed
         if specstructs == None:

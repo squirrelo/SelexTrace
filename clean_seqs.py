@@ -96,12 +96,11 @@ if __name__ == "__main__":
             "\n====================\n"]))
         #remove all underscores from headers during load for compatability reasons
         seqs = []
-        seqcount = 0
         seqsin = open(folderin + filein, 'rU')
         for header, seq in MinimalFastaParser(seqsin):
             seqs.append((header, seq))
-            seqcount += 1
-        print seqcount, "starting sequences"
+        print len(seqs), "starting sequences"
+        log.write(len(seqs), "starting sequences\n")
         #strip primers from sequences, print out not stripped to be safe
         #allowing up to 2 mismatches in the primer
         if args.ep != '': #or args.sp != '':
@@ -110,8 +109,7 @@ if __name__ == "__main__":
             kept, rem = strip_primer(seqs, args.ep, maxmismatch=2, 
                 keep_primer=True)
             del seqs
-            log.write("Primer stripping\n" + str(len(kept)) + " sequences left, " + \
-            str(len(rem)) + " sequences removed")
+            log.write("Primer stripping\n" + str(len(kept)) + " sequences left\n")
             print str(len(kept)) + " sequences left, " + \
             str(len(rem)) + " sequences removed. " + str((time() - secs)/60) + " minutes\n"
             write_fasta_list(kept, currfolder + "-Stripped.fasta")
@@ -119,7 +117,7 @@ if __name__ == "__main__":
             del rem
         else:
             kept = seqs
-        del seqs
+            del seqs
         #remove all sequences with Ns and short sequences
         print "Remove short and ambiguous sequences"
         secs = time()

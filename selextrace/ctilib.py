@@ -19,10 +19,11 @@ def fold_clusters(lock, cluster, seqs, otufolder):
     '''Function for multithreading.
     Computes structure for a cluster and writes it to file'''
     aln, struct = bayesfold(seqs, params={"-diags": True})
+    gshape = get_shape(struct)
     #write structure out to file
     lock.acquire()
     cfo = open(otufolder + "cluster_structs.fasta", 'a')
-    cfo.write(">" + cluster + "\n" + struct + "\n")
+    cfo.write(">" + cluster + " " + gshape + "\n" + struct + "\n")
     cfo.close()
     #print cluster + ": " + struct
     #stdout.flush()
@@ -150,7 +151,7 @@ def group_to_reference(fulldict, reference, nonref, structscore, norefseq=False)
             if norefseq:
                 #realign all sequences since no refseq available
                 combinedseqs = fulldict[bestref].degap().addSeqs(fulldict[currstruct].degap())
-                fulldict[bestref] = align_unaligned_seqs(combinedseqs, RNA)
+                fulldict[bestref] = align_unaligned_seqs(combinedseqs, RNA, params={"-maxiters": 2, "-diags": True})
                 continue
             #if one refseq is gapless, can easily combine them without realigning
             if not fulldict[currstruct].getGappedSeq("refseq").isGapped():
@@ -223,7 +224,7 @@ def group_denovo(fulldict, keys, structscore, norefseq=False):
     return fulldict, keys
 
 
-def group_by_distance(structgroups, structscore, specstructs=None, setfinishlen=None, norefseq=False):
+def group_by_distance(structgroups, structscore, specstructs=None, setpercent=0.01, norefseq=False):
         '''Does grouping by way of de-novo reference creation and clustering
             structgroups - dictionary with ALL structures and the Alignment
                            object keyed to them
@@ -248,11 +249,8 @@ def group_by_distance(structgroups, structscore, specstructs=None, setfinishlen=
                 structgroups, reference = group_denovo(structgroups, specstructs, structscore, norefseq)
             return structgroups
         #for speed, get 1% as initial clustering or user defined. need at least 10 structs though
-        if setfinishlen == "None":
-            finishlen = int(ceil(len(structgroups) * 0.01))
-        else:
-            finishlen = setfinishlen
-        if finishlen < 10 and len(structgroups) >= 10:
+        finishlen = int(ceil(len(structgroups) * 0.01))
+        if finishlen < 10:
             finishlen = 10
         #do initial ref grab by either all structures or specific ones passed
         if specstructs == None:

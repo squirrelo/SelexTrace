@@ -14,7 +14,7 @@ from selextrace.stutils import cluster_seqs, write_fasta_list
 from selextrace.bayeswrapper import bayesfold
 from selextrace.ctilib import fold_clusters, group_by_shape, \
     run_fold_for_infernal, group_by_forester, group_by_distance,\
-    make_r2r, run_infernal
+    make_r2r, run_infernal, group_denovo
 
 if __name__ == "__main__":
     starttime = time()
@@ -137,9 +137,8 @@ if __name__ == "__main__":
         pool.close()
         pool.join()
 
-     #read in all structures now that they are folded
+    #read in all structures now that they are folded
     structgroups = {}
-    groups_shape = {}
     count = 0
     cfo = open(otufolder + "cluster_structs.fasta", 'rU')
     nostruct = []
@@ -151,15 +150,9 @@ if __name__ == "__main__":
             continue
         #create dictionary of sequences now keyed to structures
         if struct in structgroups:
-            structgroups[struct].extend(clusters[cluster.split(" ")[0]])
+            structgroups[struct].extend(clusters[cluster])
         else:
-            structgroups[struct] = clusters[cluster.split(" ")[0]]
-        #create groups_shape dictionary of abstract shapes
-        abshape = cluster.split(" ")[1]
-        if abshape in groups_shape:
-            groups_shape[abshape].append(struct)
-        else:
-            groups_shape[abshape] = [struct]
+            structgroups[struct] = clusters[cluster]
     cfo.close()
 
     if count != len(clusters):
@@ -221,6 +214,18 @@ if __name__ == "__main__":
         skipiter = True
 
     if not skipiter:
+        print "Abstract shape assignment"
+        secs = time()
+        manager = Manager()
+        groups_shape = manager.dict()
+        pool = Pool(processes=args.c)
+        #run the pool over all groups to get structures
+        for struct in structgroups:
+            pool.apply_async(func=group_by_shape, args=(groups_shape, struct))
+        pool.close()
+        pool.join()
+        print len(groups_shape), "shape groups ("+str((time()-secs)/60)+" min)"
+
         print "start: " + str(len(structgroups)) + " initial groups"
         #initial clustering by structures generated in first folding,
         #broken out by shapes. No comparison needed at first if not same shape,
@@ -238,7 +243,7 @@ if __name__ == "__main__":
             #pool.apply_async(func=group_by_distance,
             #    args=(groupinfo, structscore, None, None, args.nr), callback=hold.update)
             stime = time()
-            hold.update(group_by_distance(groupinfo, structscore, None, None, args.nr))
+            hold.update(group_denovo(groupinfo, groupinfo.keys(), structscore))
             print len(groupinfo), "clusters:", str((time()-stime)/60), "min"
         fout.close()
         #memory saving wipe of structgroups, groups_shape, and groupinfo

@@ -137,9 +137,8 @@ if __name__ == "__main__":
         pool.close()
         pool.join()
 
-     #read in all structures now that they are folded
+    #read in all structures now that they are folded
     structgroups = {}
-    groups_shape = {}
     count = 0
     cfo = open(otufolder + "cluster_structs.fasta", 'rU')
     nostruct = []
@@ -151,15 +150,9 @@ if __name__ == "__main__":
             continue
         #create dictionary of sequences now keyed to structures
         if struct in structgroups:
-            structgroups[struct].extend(clusters[cluster.split(" ")[0]])
+            structgroups[struct].extend(clusters[cluster])
         else:
-            structgroups[struct] = clusters[cluster.split(" ")[0]]
-        #create groups_shape dictionary of abstract shapes
-        abshape = cluster.split(" ")[1]
-        if abshape in groups_shape:
-            groups_shape[abshape].append(struct)
-        else:
-            groups_shape[abshape] = [struct]
+            structgroups[struct] = clusters[cluster]
     cfo.close()
 
     if count != len(clusters):
@@ -221,6 +214,18 @@ if __name__ == "__main__":
         skipiter = True
 
     if not skipiter:
+        print "Abstract shape assignment"
+        secs = time()
+        manager = Manager()
+        groups_shape = manager.dict()
+        pool = Pool(processes=args.c)
+        #run the pool over all groups to get structures
+        for struct in structgroups:
+            pool.apply_async(func=group_by_shape, args=(groups_shape, struct))
+        pool.close()
+        pool.join()
+        print len(groups_shape), "shape groups ("+str((time()-secs)/60)+" min)"
+
         print "start: " + str(len(structgroups)) + " initial groups"
         #initial clustering by structures generated in first folding,
         #broken out by shapes. No comparison needed at first if not same shape,
@@ -271,7 +276,7 @@ if __name__ == "__main__":
 =======
         #print len(hold), "clusters fgrouping"
         #stime = time()
-        #structgroups = group_by_distance(hold, structscore, None, 0.05, norefseq=args.nr)
+        #structgroups = group_by_distance(hold, structscore, norefseq=args.nr)
         #print "Grouped ("+str((time()-stime)/60)+" min)"
         structgroups = dict(hold)
         del hold
@@ -279,8 +284,7 @@ if __name__ == "__main__":
 
         #sort all structure sequences by count, highest to lowest
         for struct in structgroups:
-            if not args.nr:
-                structgroups[struct].Names.remove('refseq')
+            structgroups[struct].Names.remove('refseq')
             structgroups[struct].Names.sort(reverse=True,
                 key=lambda count: int(count.split('_')[1]))
         print str(len(structgroups))+" end groups ("+str((time()-secs)/60)+" min)"

@@ -12,5 +12,5 @@ if __name__ == "__main__":
         #feed sequences to weblogo
         p = Popen(["weblogo", "-F", "pdf", "-A", "rna", "-c", "classic",
             "-t", folder, "-f", basefolder + folder + "/bayesfold-aln.sto",
-            "-o", basefolder + folder + "/logo.pdf"])
+            "-o", basefolder + folder + "/logo.pdf", "-U", "probability"])
         p.communicate()

@@ -18,7 +18,6 @@ from selextrace.ctilib import fold_clusters, group_by_shape, \
 
 if __name__ == "__main__":
     starttime = time()
-    #TURN INTO COGENT OPTION PARSING   cogent.util.option_parsing
     parser = argparse.ArgumentParser(description="Runs sequence grouping \
         and infernal over all rounds of a SELEX selection")
     parser.add_argument('-i', required=True, 
@@ -55,7 +54,7 @@ if __name__ == "__main__":
         print "ERROR: RNAforester score cutoff must be greater than 0!"
         exit(1)
     if args.sim < 0.0 or args.sim > 1.0:
-        print "ERROR: Infernal score cutoff must be greater than 0!"
+        print "ERROR: Infernal score cutoff must be >= 0 and <= 1!"
         exit(1)
 
     structscore = args.rsc

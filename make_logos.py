@@ -1,4 +1,4 @@
-from sys import argv
+clfrom sys import argv
 from os import walk
 from subprocess import Popen, PIPE
 

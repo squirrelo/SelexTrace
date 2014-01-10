@@ -1,17 +1,12 @@
 
-from cogent.parse.fasta import MinimalFastaParser
-from collections import defaultdict
 from cogent import LoadSeqs
 from cogent.app.uclust import Uclust, clusters_from_uc_file
-from cogent.parse.fasta import MinimalFastaParser
-from sys import argv
-from os.path import exists
 from subprocess import Popen, PIPE
 from qiime.split_libraries import local_align_primer_seq
 
 
 def write_fasta_list(lst, filename):
-    '''writes MinimalFastaParser formatted list [(header,sequence)] to fasta file filename'''
+    '''writes formatted list [(header,sequence)] to fasta file filename'''
     fileout = open(filename, 'w')
     for seq in lst:
         fileout.write('>%s\n%s\n' % (seq[0], seq[1]))
@@ -19,7 +14,7 @@ def write_fasta_list(lst, filename):
 
 
 def write_fasta_dict(dct, filename):
-    '''writes MinimalFastaParser formatted dict {header: sequence} to fasta file filename'''
+    '''writes formatted dict {header: sequence} to fasta file filename'''
     fileout = open(filename, 'w')
     for header, seq in dct:
         fileout.write('>%s\n%s\n' % (header, seq))
@@ -31,20 +26,26 @@ def strip_primer(seqs, primer, maxmismatch=0, keep_primer=False):
     formatted arrays for stripped and not stripped sequences'''
     nostripped = []
     stripped = []
+    pri = primer.upper()
     for head, seq in seqs:
-        seq = seq.replace('U', 'T')
+        RNA = False
+        seq = seq.upper()
+        if 'U' in seq:
+            seq = seq.replace('U', 'T')
+            RNA = True
         #code adapted from truncate_reverse_primers.py in qiime
         rev_primer_mm, rev_primer_index =\
-            local_align_primer_seq(primer, seq)
+            local_align_primer_seq(pri, seq)
         if rev_primer_mm > maxmismatch:
-            nostripped.append(seq)
+            nostripped.append((head, seq))
+            continue
+        if keep_primer:
+            seqnew = seq[:rev_primer_index + len(primer)]
         else:
-            if keep_primer:
-                seqnew = seq[:rev_primer_index + len(primer)]
-            else:
-                seqnew = seq[:rev_primer_index]
+            seqnew = seq[:rev_primer_index]
+        if RNA:
             seqnew = seqnew.replace('T', 'U')
-            stripped.append((head, seqnew))
+        stripped.append((head, seqnew))
     #end for
     return stripped, nostripped
 
@@ -89,41 +90,22 @@ def cluster_seqs(seqspath, simmilarity, folderout='/tmp', gapopen=None, gapext=N
     return clusterseqs
 
 
-def remove_duplicate(lst, seq):
-    '''Generic function for removing duplicates of a sequence in a list
-    Takes MinimalFastaParser formatted tuple list'''
-    return [x for x in lst if x[1] != seq]
-
-
 def remove_duplicates(seqsin):
-    '''Takes in minimalfastaparser formatted list, removes duplicate sequences
-    and returns a MinimalFastaParser formatted list of unique sequences (with
-    one sequence from each duplicate set)'''
+    '''Takes in LoadSeqs loadable sequences, removes duplicate sequences
+    and returns a list of unique sequence tuples, formated (sequence, count)
+    sorted most abundant to least abundant'''
 
+    parsable_seqs = LoadSeqs(data=seqsin, aligned=False)
     uniques = {}
-    counts = defaultdict(int)
-    #uniquesret: standard (header, seq) tuple list of unique sequeces
-    #repseqs: dict of lists keyed to a sequence. Holds all headers of duplicate
-    #sequences with that sequence
-    repseqs = defaultdict(list)
-    for seq in seqsin:
-        if seq[1] not in uniques:
-            #append unique sequence to uniques list
-            uniques[seq[1]] = seq[0]
-        #first item in repseqs list will be header of representative sequence
-        repseqs[seq[1]].append(seq[0])
-        counts[seq[1]] += 1
-    #append count to end of header
-    uniquesret = []
-    for unique in uniques:
-        #get count for this seuqnce
-        count = counts[unique]
-        #append to header and add to return list
-        uniquesret.append((uniques[unique].replace("_", "") + "_" + str(count), unique))
-    #sort by sequence count, highest to lowest
-    uniquesret.sort(reverse=True, key=lambda item: int(item[0].split("_")[1]))
-    return uniquesret, repseqs
-
+    for header, seq in parsable_seqs.items():
+        seq = str(seq)
+        if seq in uniques:
+            uniques[seq] += 1
+        else:
+            uniques[seq] = 1
+    uniques = uniques.items()
+    uniques.sort(key=lambda x: x[1], reverse=True)
+    return uniques
 
 def get_shape(struct):
     '''Converts a dot-bracket notation to abstract shape notation'''
